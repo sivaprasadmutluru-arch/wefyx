@@ -560,6 +560,18 @@
 .cart-site .rp-cart-or:before,.cart-site .rp-cart-or:after{content:"";height:1px;background:#e1f1ea;flex:1}
 .cart-site .rp-summary-actions{display:flex;gap:8px;margin-top:0!important}
 .cart-site .rp-summary-actions a,.cart-site .rp-summary-actions button{flex:1;display:flex;align-items:center;justify-content:center;min-height:40px;border:1px solid #dcefe7;background:#fff;border-radius:5px;color:#008553;text-decoration:none;font-size:11px;font-weight:600;cursor:pointer}
+.cart-site .rp-cart-side .rp-summary>div.grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:8px!important;margin-top:12px!important}
+.cart-site .rp-cart-side .rp-summary>div.mt-4{display:block!important;margin-top:16px!important;padding:14px!important;border:1px solid #e2f2eb;border-radius:8px;background:#f8fcfa}
+.cart-site .rp-cart-side .rp-summary>div.mt-4>b{display:block;margin-bottom:10px;font-size:12px;line-height:1.25;color:#123d2b}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:10px!important;margin-top:0!important}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 input,.cart-site .rp-cart-side .rp-summary>div.mt-4 textarea{width:100%;min-width:0;border-color:#d9ece4;background:#fff;color:#123d2b}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 textarea{min-height:76px;resize:vertical;line-height:1.45}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .grid-cols-2{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 label.flex{display:flex!important;align-items:flex-start!important;gap:8px!important;line-height:1.35}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 label.flex input{width:14px;height:14px;margin-top:1px;flex:none}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.flex{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin-top:12px!important}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.flex button{min-width:0;min-height:38px;white-space:normal;line-height:1.2}
+.cart-site .rp-cart-side .rp-summary>div.mt-4>p{display:block!important;margin-top:10px!important;line-height:1.5}
 .cart-site .rp-cart-assurance{position:static!important;height:auto!important;padding:12px 16px}
 .cart-site .rp-cart-assurance>div{display:flex;align-items:center;gap:12px;margin:8px 0}
 .cart-site .rp-cart-assurance svg{color:#008553;width:26px;height:26px;flex:none}
