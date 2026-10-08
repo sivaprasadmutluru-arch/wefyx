@@ -23,7 +23,7 @@ public class SecurityConfig {
         .requestMatchers(HttpMethod.GET,"/api/bookings/catalog","/api/bookings/availability","/api/catalog/products","/api/catalog/products/**","/book-support/**","/my-tickets/**","/service-tasks/**","/support-updates/**","/portal").permitAll()
         .requestMatchers(HttpMethod.POST,"/api/support-requests","/api/orders/stripe/webhook").permitAll()
         .requestMatchers(HttpMethod.GET,"/register","/signup","/join","/login","/signin","/forgot-password","/reset-password","/careers","/become-a-vendor","/rent/**","/rent-equipment","/cart","/account/**","/services","/it-services","/managed-services","/data-center","/amc","/solutions","/business-solutions","/industries","/about","/contact","/support","/shop","/privacy-policy","/terms","/rental-terms","/refund-policy").permitAll()
-        .requestMatchers("/","/index.html","/assets/**","/images/**","/favicon.ico","/api","/api/","/api/auth/**","/error").permitAll()
+        .requestMatchers("/","/index.html","/assets/**","/images/**","/payment-icons/**","/favicon.ico","/api","/api/","/api/auth/**","/error").permitAll()
         .requestMatchers(HttpMethod.GET,"/api/users/**").hasAnyRole("SUPER_ADMIN","EMPLOYEE")
         .requestMatchers("/api/users/**","/api/roles/**","/api/dashboard/**","/api/organizations/**","/api/employee-registrations/**","/api/vendor-registrations/**").hasRole("SUPER_ADMIN")
         .requestMatchers("/api/support-requests/**").hasAnyRole("SUPER_ADMIN","EMPLOYEE")
