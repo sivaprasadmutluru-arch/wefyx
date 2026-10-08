@@ -38,7 +38,7 @@ const rentalIds = {
 };
 const rentalPrice = (text) => Number(String(text).match(/[\d,]+/)?.[0].replaceAll(",", "") || 0);
 const paymentOptions = [
-  ["CARD", "Credit / debit card", "Pay securely through Stripe Checkout. Test mode cards can be used until live Stripe keys are added."],
+  ["CARD", "Credit / debit card", "Pay securely by Visa, Mastercard or UAE bank card."],
   ["APPLE_PAY", "Apple Pay", "Fast mobile wallet payment after confirmation through the payment link."],
   ["GOOGLE_PAY", "Google Pay", "Pay with a saved card after the secure payment link is issued."],
   ["SAMSUNG_PAY", "Samsung Pay", "Mobile wallet payment supported through compatible card checkout links."],
