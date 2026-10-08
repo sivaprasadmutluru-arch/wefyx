@@ -135,7 +135,7 @@ function OnboardingStepper({ current }) {
 }
 
 export default function PublicRegistration({ initialView = "login" }) {
-  // view: 'login' | 'signup' | 'otp' | 'business' | 'address' | 'review' | 'success' | 'forgot'
+  // view: 'login' | 'loginOtp' | 'signup' | 'otp' | 'business' | 'address' | 'review' | 'success' | 'forgot'
   const [view, setView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get("mode");
@@ -156,6 +156,8 @@ export default function PublicRegistration({ initialView = "login" }) {
   // Login Form (Unified simple login for ALL roles without any role selector tabs)
   const [loginForm, setLoginForm] = useState({
     identifier: "",
+    verifiedPhone: "",
+    otp: "",
     password: "",
     rememberMe: true,
   });
@@ -202,7 +204,7 @@ export default function PublicRegistration({ initialView = "login" }) {
   // Resend Timer Countdown
   useEffect(() => {
     let interval = null;
-    if (view === "otp" && timer > 0) {
+    if ((view === "otp" || view === "loginOtp") && timer > 0) {
       interval = setInterval(() => setTimer((t) => t - 1), 1000);
     }
     return () => clearInterval(interval);
@@ -243,32 +245,58 @@ export default function PublicRegistration({ initialView = "login" }) {
     }
   }
 
-  // Action: Screen 1 -> Screen 2 (Send OTP)
+  function normalizeSignupPhone() {
+    const cleanPhone = form.phone.trim().replace(/[\s()-]/g, "");
+    const full = cleanPhone.startsWith("+") ? cleanPhone : `${form.dialCode}${cleanPhone.replace(/^0/, "")}`;
+    return full;
+  }
+
+  function normalizeLoginPhone(phone) {
+    const cleanPhone = phone.trim().replace(/[\s()-]/g, "");
+    return cleanPhone.startsWith("+") ? cleanPhone : `+971${cleanPhone.replace(/^0/, "")}`;
+  }
+
+  // Action: Screen 1 -> Screen 2 (Account access)
   async function handleSendOtp(event) {
     event.preventDefault();
     setError("");
     setSuccess("");
-    const cleanPhone = form.phone.trim().replace(/[\s()-]/g, "");
-    if (!cleanPhone) return setError("Please enter your mobile number.");
-    const full = cleanPhone.startsWith("+") ? cleanPhone : `${form.dialCode}${cleanPhone.replace(/^0/, "")}`;
+    const full = normalizeSignupPhone();
     if (!/^\+9715[024568][0-9]{7}$/.test(full)) return setError("Enter a valid UAE mobile number with country code +971, for example +971501234567.");
     if (form.password.length < 8 || new TextEncoder().encode(form.password).length > 72) return setError("Password must be at least 8 characters and no more than 72 bytes.");
     setForm((curr) => ({ ...curr, fullPhone: full }));
-    setBusy(true);
-    try {
-      const result = await sendPublic("/auth/send-otp", "POST", { phone: full, purpose: "registration" });
-      setForm((curr) => ({ ...curr, fullPhone: result.phone, otp: Array(6).fill("") }));
-      setSuccess(result.message);
-      setTimer(30);
-      setView("otp");
-    } catch (err) {
-      setError(err.message || "Failed to send OTP. Please try again.");
-    } finally {
-      setBusy(false);
-    }
+    setView("business");
   }
 
-  // Action: Screen 2 -> Screen 3 (Verify OTP)
+  async function createAccountWithOtp(otp) {
+    const payload = {
+      name: form.contactPerson.trim(),
+      email: form.companyEmail.trim(),
+      organization: form.companyName.trim(),
+      companyName: form.companyName.trim(),
+      phone: form.fullPhone.trim(),
+      tradeLicense: form.tradeLicense.trim(),
+      industry: form.industry,
+      jobTitle: form.jobTitle.trim(),
+      website: form.website.trim(),
+      country: form.country,
+      emirate: form.emirate,
+      address: form.address.trim(),
+      password: form.password,
+      role: "CUSTOMER",
+      otp,
+    };
+    const res = await sendPublic("/auth/register", "POST", payload);
+    if (res.token) {
+      localStorage.setItem("wefyx-token", res.token);
+      localStorage.setItem("wefyx-auth", "true");
+      localStorage.setItem("wefyx-user", JSON.stringify(res.user));
+      localStorage.setItem("wefyx-account-type", "customer");
+    }
+    setView("success");
+  }
+
+  // Action: Final screen -> Create account after phone OTP
   async function handleVerifyOtp(event) {
     event.preventDefault();
     setError("");
@@ -276,10 +304,9 @@ export default function PublicRegistration({ initialView = "login" }) {
     if (code.length !== 6) return setError("Please enter the complete 6-digit OTP.");
     setBusy(true);
     try {
-      await sendPublic("/auth/verify-otp", "POST", { phone: form.fullPhone, otp: code });
-      setView("business");
+      await createAccountWithOtp(code);
     } catch (err) {
-      setError(err.message || "Invalid OTP. Please check and try again.");
+      setError(err.message || "Invalid OTP or registration failed. Please check and try again.");
     } finally {
       setBusy(false);
     }
@@ -308,41 +335,23 @@ export default function PublicRegistration({ initialView = "login" }) {
     setView("review");
   }
 
-  // Action: Screen 5 -> Screen 6 (Final Registration - Default Role CUSTOMER)
+  // Action: Screen 5 -> Send registration OTP after all details are entered
   async function handleCreateAccount(event) {
     event.preventDefault();
     setError("");
+    setSuccess("");
     if (!form.termsConsent) {
       return setError("Please agree to the Terms of Service and Privacy Policy.");
     }
     setBusy(true);
     try {
-      const payload = {
-        name: form.contactPerson.trim(),
-        email: form.companyEmail.trim(),
-        organization: form.companyName.trim(),
-        companyName: form.companyName.trim(),
-        phone: form.fullPhone.trim(),
-        tradeLicense: form.tradeLicense.trim(),
-        industry: form.industry,
-        jobTitle: form.jobTitle.trim(),
-        website: form.website.trim(),
-        country: form.country,
-        emirate: form.emirate,
-        address: form.address.trim(),
-        password: form.password,
-        role: "CUSTOMER", // Default role
-      };
-      const res = await sendPublic("/auth/register", "POST", payload);
-      if (res.token) {
-        localStorage.setItem("wefyx-token", res.token);
-        localStorage.setItem("wefyx-auth", "true");
-        localStorage.setItem("wefyx-user", JSON.stringify(res.user));
-        localStorage.setItem("wefyx-account-type", "customer");
-      }
-      setView("success");
+      const result = await sendPublic("/auth/send-otp", "POST", { phone: form.fullPhone, purpose: "registration" });
+      setForm((curr) => ({ ...curr, fullPhone: result.phone, otp: Array(6).fill("") }));
+      setSuccess(result.message);
+      setTimer(30);
+      setView("otp");
     } catch (err) {
-      setError(err.message || "Failed to create account. Please try again.");
+      setError(err.message || "Failed to send OTP. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -352,6 +361,11 @@ export default function PublicRegistration({ initialView = "login" }) {
   async function handleLoginSubmit(event) {
     event.preventDefault();
     setError("");
+    setSuccess("");
+    await requestPhoneOrEmailLogin();
+  }
+
+  async function requestPhoneOrEmailLogin() {
     const id = loginForm.identifier.trim();
     if (!id || !loginForm.password) {
       return setError("Please enter your email or mobile number and password.");
@@ -359,6 +373,15 @@ export default function PublicRegistration({ initialView = "login" }) {
     setBusy(true);
     try {
       const isPhone = id.replace(/\s+/g, "").match(/^\+?\d+$/);
+      if (isPhone) {
+        const phone = normalizeLoginPhone(id);
+        const result = await sendPublic("/auth/login/send-otp", "POST", { phone, password: loginForm.password });
+        setLoginForm((curr) => ({ ...curr, verifiedPhone: result.phone, otp: "" }));
+        setSuccess(result.message);
+        setTimer(30);
+        setView("loginOtp");
+        return;
+      }
       const payload = isPhone
         ? { phone: id, password: loginForm.password }
         : { email: id, password: loginForm.password };
@@ -375,6 +398,32 @@ export default function PublicRegistration({ initialView = "login" }) {
       }
     } catch (err) {
       setError(err.message || "Invalid credentials. Please check your email/mobile and password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePhoneLoginVerify(event) {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const res = await sendPublic("/auth/login/verify", "POST", {
+        phone: loginForm.verifiedPhone,
+        password: loginForm.password,
+        otp: loginForm.otp,
+      });
+      if (res.token) {
+        localStorage.setItem("wefyx-token", res.token);
+        localStorage.setItem("wefyx-auth", "true");
+        localStorage.setItem("wefyx-user", JSON.stringify(res.user));
+        localStorage.setItem("wefyx-account-type", (res.user.role || "customer").toLowerCase());
+        const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+        const customerDestination = returnTo && /^\/(account|cart|shop|rent|services|book-support|my-tickets)(\/|\?|$)/.test(returnTo) && !returnTo.includes("\\") ? returnTo : "/account";
+        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/portal");
+      }
+    } catch (err) {
+      setError(err.message || "Invalid OTP. Please check and try again.");
     } finally {
       setBusy(false);
     }
@@ -541,7 +590,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                 {error && <div role="alert" className="wf-alert wf-alert-error">{error}</div>}
 
                 <button type="submit" disabled={busy} className="wf-primary-btn">
-                  {busy ? "Sending OTP…" : "Send OTP"} <ArrowRight size={17} />
+                  Continue <ArrowRight size={17} />
                 </button>
 
                 <p className="wf-terms-text">
@@ -563,7 +612,7 @@ export default function PublicRegistration({ initialView = "login" }) {
         {view === "otp" && (
           <div className="wf-auth-wrapper wf-auth-narrow">
             <section className="wf-auth-card wf-otp-box">
-              <OnboardingStepper current={0} />
+              <OnboardingStepper current={3} />
 
               <div className="wf-otp-phone-card">
                 <Smartphone size={36} />
@@ -611,11 +660,11 @@ export default function PublicRegistration({ initialView = "login" }) {
                 {error && <div role="alert" className="wf-alert wf-alert-error">{error}</div>}
 
                 <button type="submit" disabled={busy} className="wf-primary-btn">
-                  {busy ? "Verifying…" : "Verify & Continue"} <ArrowRight size={17} />
+                  {busy ? "Creating Account…" : "Verify & Create Account"} <ArrowRight size={17} />
                 </button>
 
                 <div>
-                  <button type="button" onClick={() => setView("signup")} className="wf-back-link">
+                  <button type="button" onClick={() => setView("review")} className="wf-back-link">
                     <ArrowLeft size={16} /> Back
                   </button>
                 </div>
@@ -640,7 +689,7 @@ export default function PublicRegistration({ initialView = "login" }) {
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Tell Us About Your Business</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Please provide your company details to complete your onboarding.
+                  Please provide your company details. Your mobile number will be verified before the account is created.
                 </p>
               </div>
 
@@ -776,7 +825,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                 </button>
 
                 <div>
-                  <button type="button" onClick={() => setView("otp")} className="wf-back-link">
+                  <button type="button" onClick={() => setView("signup")} className="wf-back-link">
                     <ArrowLeft size={16} /> Back
                   </button>
                 </div>
@@ -898,7 +947,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                 {error && <div role="alert" className="wf-alert wf-alert-error">{error}</div>}
 
                 <button type="submit" className="wf-primary-btn mt-2">
-                  Next: Complete Registration <ArrowRight size={17} />
+                  Next: Review Details <ArrowRight size={17} />
                 </button>
 
                 <div>
@@ -922,7 +971,7 @@ export default function PublicRegistration({ initialView = "login" }) {
               <div className="mb-4">
                 <h2 className="text-2xl font-bold text-slate-900">Review &amp; Complete</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Please review your information before creating your account.
+                  Please review your information. We will verify your mobile number before creating the account.
                 </p>
               </div>
 
@@ -996,7 +1045,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                 {error && <div role="alert" className="wf-alert wf-alert-error">{error}</div>}
 
                 <button type="submit" disabled={busy} className="wf-primary-btn">
-                  {busy ? "Creating Account…" : "Create My Account"} <ArrowRight size={17} />
+                  {busy ? "Sending OTP…" : "Verify Mobile & Create Account"} <ArrowRight size={17} />
                 </button>
 
                 <div>
@@ -1200,6 +1249,61 @@ export default function PublicRegistration({ initialView = "login" }) {
                   <Zap size={15} /> Always On
                 </span>
               </div>
+            </section>
+          </div>
+        )}
+
+        {view === "loginOtp" && (
+          <div className="wf-auth-wrapper wf-auth-narrow">
+            <section className="wf-auth-card wf-otp-box">
+              <div className="wf-otp-phone-card">
+                <Smartphone size={36} />
+              </div>
+
+              <h2 className="text-2xl font-bold text-slate-900">Verify Mobile Login</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {success || "Enter the 6-digit OTP for"} <strong>{loginForm.verifiedPhone}</strong>
+              </p>
+
+              <form onSubmit={handlePhoneLoginVerify}>
+                <div className="wf-form-group mt-6">
+                  <label className="wf-form-label">SMS verification code</label>
+                  <input
+                    aria-label="SMS verification code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                    value={loginForm.otp}
+                    onChange={(e) => setLoginForm((curr) => ({ ...curr, otp: e.target.value.replace(/\D/g, "") }))}
+                  />
+                </div>
+
+                <div className="wf-resend-timer">
+                  {timer > 0 ? (
+                    <>
+                      Didn&apos;t receive the code? <strong>Resend OTP in 00:{timer < 10 ? `0${timer}` : timer}</strong>
+                    </>
+                  ) : (
+                    <button type="button" onClick={requestPhoneOrEmailLogin} disabled={busy} className="wf-resend-btn">
+                      Resend OTP now
+                    </button>
+                  )}
+                </div>
+
+                {error && <div role="alert" className="wf-alert wf-alert-error">{error}</div>}
+
+                <button type="submit" disabled={busy} className="wf-primary-btn">
+                  {busy ? "Verifying…" : "Verify & Login"} <ArrowRight size={17} />
+                </button>
+
+                <div>
+                  <button type="button" onClick={() => setView("login")} className="wf-back-link">
+                    <ArrowLeft size={16} /> Back to Login
+                  </button>
+                </div>
+              </form>
             </section>
           </div>
         )}

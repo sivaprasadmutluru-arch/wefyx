@@ -94,6 +94,8 @@ public class AuthController {
         if(user!=null) {
             boolean validPassword = user.getPasswordHash()!=null && passwords.matches(suppliedPassword,user.getPasswordHash());
             if(validPassword) {
+                if(!identifier.contains("@"))
+                    return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).body(Map.of("message","Mobile login requires SMS verification."));
                 if(user.getStatus()==UserStatus.PENDING) {
                     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message","Your "+loginRole(user.getRole()).toLowerCase()+" registration is pending admin approval."));
                 }
@@ -105,6 +107,42 @@ public class AuthController {
             }
         }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message","Invalid credentials. Please check your role, email/phone, and password."));
+    }
+
+    @PostMapping("/login/send-otp")
+    public Map<String, Object> sendLoginOtp(@RequestBody LoginRequest request) {
+        var user = requirePhonePasswordUser(request);
+        String phone = otpService.send(user.getPhone());
+        return Map.of("success", true, "message", otpMessage(phone), "phone", phone,
+            "delivery", otpService.isLocal() ? "console" : "sms");
+    }
+
+    @PostMapping("/login/verify")
+    public ResponseEntity<?> verifyPhoneLogin(@RequestBody PhoneLoginRequest request) {
+        var user = requirePhonePasswordUser(new LoginRequest(null, request.phone(), request.password()));
+        otpService.verify(user.getPhone(), request.otp());
+        user.setLastLogin(java.time.LocalDateTime.now());
+        users.save(user);
+        return session(user);
+    }
+
+    private SupportUser requirePhonePasswordUser(LoginRequest request) {
+        if (request == null || request.phone() == null || request.phone().isBlank() || request.password() == null || request.password().isBlank())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Mobile number and password are required.");
+        String phone = OtpService.normalize(request.phone());
+        var user = users.findByPhone(phone)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid mobile number or password."));
+        if (user.getPasswordHash() == null || !passwords.matches(request.password(), user.getPasswordHash()))
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid mobile number or password.");
+        if (user.getStatus() == UserStatus.PENDING)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Your " + loginRole(user.getRole()).toLowerCase() + " registration is pending admin approval.");
+        if (user.getStatus() != UserStatus.ACTIVE)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is not active.");
+        return user;
+    }
+
+    private String otpMessage(String phone) {
+        return otpService.isLocal() ? "Development OTP is in the backend terminal. No SMS was sent." : "OTP requested for " + phone;
     }
 
     private boolean matches(String expectedEmail,String expectedPassword,String email,String password){
@@ -129,6 +167,7 @@ public class AuthController {
         String loc = request.address() != null ? request.address().trim() : "";
         String phoneStr = UserIdentity.phone(request.phone(), true);
         identities.check(email, phoneStr, null);
+        otpService.verifyRegistration(phoneStr, request.otp());
 
         var user=new SupportUser(request.name().trim(),email,role,org,loc,pending?UserStatus.PENDING:UserStatus.ACTIVE,null,now);
         user.setPhone(phoneStr);
@@ -211,6 +250,7 @@ public class AuthController {
     }
 
     public record LoginRequest(String email, String phone, String password){}
+    public record PhoneLoginRequest(String phone, String password, String otp){}
     public record RegistrationRequest(
         @NotBlank @Size(max=120) String name,
         @NotBlank @Email @Size(max=254) String email,
@@ -225,11 +265,11 @@ public class AuthController {
         String website,
         String emirate,
         String address,
-        String country
+        String country,
+        @NotBlank @Pattern(regexp="[0-9]{6}") String otp
     ){
         public RegistrationRequest {
             email = email == null ? null : email.trim();
         }
     }
 }
-

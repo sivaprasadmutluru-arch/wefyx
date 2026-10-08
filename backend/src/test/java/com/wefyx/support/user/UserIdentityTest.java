@@ -11,14 +11,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ResponseStatusException;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:identity-tests;DB_CLOSE_DELAY=-1", "spring.datasource.username=sa", "spring.datasource.password=", "wefyx.seed.enabled=false"})
+@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:identity-tests;DB_CLOSE_DELAY=-1", "spring.datasource.username=sa", "spring.datasource.password=", "wefyx.seed.enabled=false", "wefyx.otp.registration-demo-bypass=true"})
 @AutoConfigureMockMvc
+@ActiveProfiles("local-otp")
 class UserIdentityTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
@@ -28,7 +30,7 @@ class UserIdentityTest {
     @Autowired com.wefyx.support.auth.JwtService jwt;
 
     private Map<String,String> registration(String email, String phone) {
-        return Map.of("name", "Test User", "email", email, "phone", phone, "password", "TestPassword123", "role", "CUSTOMER");
+        return Map.of("name", "Test User", "email", email, "phone", phone, "password", "TestPassword123", "role", "CUSTOMER", "otp", "123456");
     }
 
     @Test void registrationRejectsDuplicateEmailAndFormattedMobileWithoutChangingAccount() throws Exception {
@@ -60,11 +62,23 @@ class UserIdentityTest {
             .andExpect(status().isCreated());
         for (String identifier : new String[]{"PASSWORD-CHECK@example.com", "+971 50 987 6543"}) {
             String key = identifier.contains("@") ? "email" : "phone";
-            mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123"))))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty());
-            for (String wrong : new String[]{"incorrect", "Password@123", "admin@123", "customer@123", "vendor@123", "employee@123"})
+            if (identifier.contains("@")) {
                 mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123"))))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty());
+            } else {
+                mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123"))))
+                    .andExpect(status().isPreconditionRequired());
+                mvc.perform(post("/api/auth/login/send-otp").contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123"))))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("+971509876543"));
+                mvc.perform(post("/api/auth/login/verify").contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123", "otp", "123456"))))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty());
+            }
+            for (String wrong : new String[]{"incorrect", "Password@123", "admin@123", "customer@123", "vendor@123", "employee@123"})
+                mvc.perform(post(identifier.contains("@") ? "/api/auth/login" : "/api/auth/login/send-otp").contentType(MediaType.APPLICATION_JSON)
                     .content(json.writeValueAsString(Map.of(key, identifier, "password", wrong))))
                     .andExpect(status().isUnauthorized());
         }
