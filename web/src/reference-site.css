@@ -694,6 +694,18 @@
 .cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(2),.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(3){justify-self:start}
 @media(max-width:900px){.cart-site .rp-cart-side.is-open{grid-template-columns:1fr!important;grid-template-areas:"head" "address" "payment" "summary" "assurance"!important;padding:14px!important}.cart-site .rp-cart-side.is-open>.rp-summary{max-width:none}.cart-site .rp-cart-side.is-open .rp-cart-assurance{grid-template-columns:1fr 1fr}.cart-site .rp-checkout-modal-head h2{font-size:17px}}
 @media(max-width:620px){.cart-site .rp-checkout-teaser{padding:14px}.cart-site .rp-cart-side.is-open{padding:10px!important}.cart-site .rp-cart-side.is-open .rp-cart-assurance{grid-template-columns:1fr}.cart-site .rp-checkout-modal-head{border-radius:7px}}
+.cart-site .rp-cart-items article{grid-template-columns:20px 82px minmax(0,1fr) 112px 24px;grid-template-areas:"check image info mode remove" "check image info qty remove" "check image price price price";align-items:center}
+.cart-site .rp-cart-check{grid-area:check}
+.cart-site .rp-cart-items article>img{grid-area:image}
+.cart-site .rp-cart-item-name{grid-area:info;min-width:0}
+.cart-site .rp-toggle{grid-area:mode;width:100%}
+.cart-site .rp-qty{grid-area:qty;width:112px;min-width:112px}
+.cart-site .rp-qty span{width:100%;border:1px solid #dcefe7;border-radius:5px;overflow:hidden;background:#fff}
+.cart-site .rp-duration{display:none!important}
+.cart-site .rp-cart-items article strong{grid-area:price;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #edf6f2;padding-top:8px}
+.cart-site .rp-cart-items article strong small,.cart-site .rp-cart-items article strong em{display:none}
+.cart-site .rp-cart-items article .rp-remove{grid-area:remove;justify-self:end}
+@media(max-width:760px){.cart-site .rp-cart-items article{grid-template-columns:18px 64px minmax(0,1fr) 22px;grid-template-areas:"check image info remove" "check image mode remove" "check image qty remove" "check price price price"}.cart-site .rp-toggle,.cart-site .rp-qty{width:128px;min-width:128px}.cart-site .rp-cart-items article strong{font-size:12px}}
 .detail-site .rp-description-panel{min-height:185px}
 .detail-site .rp-install{position:static!important;height:auto!important;align-self:start;padding:15px;background:#f4fefa;border:1px solid #dcf4ea;border-radius:5px}
 .detail-site .rp-install h2{font-size:14px;margin:0 0 7px}
