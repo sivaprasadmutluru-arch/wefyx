@@ -6,6 +6,7 @@ import com.wefyx.support.catalog.CatalogProductRepository;
 import com.wefyx.support.config.AccessControl;
 import com.wefyx.support.config.AccessControl.Role;
 import com.wefyx.support.notification.NotificationService;
+import com.wefyx.support.profile.CustomerAddressRepository;
 import com.wefyx.support.user.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -23,13 +24,14 @@ import java.util.*;
 public class CustomerOrderController {
     private final CustomerOrderRepository orders;
     private final CatalogProductRepository products;
+    private final CustomerAddressRepository addresses;
     private final UserRepository users;
     private final AccessControl access;
     private final NotificationService notifications;
     private final ObjectMapper json;
 
-    public CustomerOrderController(CustomerOrderRepository orders,CatalogProductRepository products,UserRepository users,AccessControl access,NotificationService notifications,ObjectMapper json){
-        this.orders=orders;this.products=products;this.users=users;this.access=access;this.notifications=notifications;this.json=json;
+    public CustomerOrderController(CustomerOrderRepository orders,CatalogProductRepository products,CustomerAddressRepository addresses,UserRepository users,AccessControl access,NotificationService notifications,ObjectMapper json){
+        this.orders=orders;this.products=products;this.addresses=addresses;this.users=users;this.access=access;this.notifications=notifications;this.json=json;
     }
 
     @GetMapping
@@ -52,6 +54,7 @@ public class CustomerOrderController {
         if(input.items()==null||input.items().isEmpty())bad("Your cart is empty");
         if(input.items().size()>50)bad("An order can contain at most 50 products");
         var account=users.findByEmailIgnoreCase(auth.getName()).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Customer account not found"));
+        DeliveryAddress delivery=delivery(input.deliveryAddress(),account,auth.getName());
         List<Item> clean=new ArrayList<>(); BigDecimal subtotal=BigDecimal.ZERO; int itemCount=0;
         for(Item requested:input.items()){
             var product=products.findByCodeIgnoreCase(requested.productId()).filter(x->x.isActive()).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"Product is no longer available: "+requested.productId()));
@@ -71,6 +74,7 @@ public class CustomerOrderController {
         var order=new CustomerOrder();
         order.setReference(nextReference());order.setCustomerEmail(account.getEmail());order.setCustomerName(account.getName());order.setOrganization(account.getOrganization());
         order.setStatus("PLACED");order.setCurrency("AED");order.setSubtotal(subtotal);order.setVat(vat);order.setTotal(subtotal.add(vat));order.setItemCount(itemCount);
+        order.setDeliveryLabel(delivery.label());order.setDeliveryContactName(delivery.contactName());order.setDeliveryPhone(delivery.phone());order.setDeliveryAddress(delivery.addressLine());order.setDeliveryEmirate(delivery.emirate());order.setDeliveryCountry(delivery.country());order.setDeliveryLatitude(delivery.latitude());order.setDeliveryLongitude(delivery.longitude());
         try{order.setItemsJson(json.writeValueAsString(clean));}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Unable to save order");}
         var saved=orders.save(order);
         notifications.send(account.getEmail(),null,"ORDER_PLACED","Order received",saved.getReference()+" has been received and is awaiting confirmation.");
@@ -89,11 +93,32 @@ public class CustomerOrderController {
     private CustomerOrder find(Long id){return orders.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Order not found"));}
     private void visible(CustomerOrder order,Authentication auth){Role role=access.role(auth);if(role==Role.CUSTOMER&&!order.getCustomerEmail().equalsIgnoreCase(auth.getName()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"This order is not available to your account");if(role==Role.VENDOR)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Vendors cannot access customer orders");}
     private String nextReference(){long number=orders.count()+1;while(true){String value="ORD-"+LocalDateTime.now().getYear()+"-"+String.format("%05d",number++);if(orders.findByReference(value).isEmpty())return value;}}
-    private View view(CustomerOrder order){try{return new View(order.getId(),order.getReference(),order.getStatus(),order.getCurrency(),order.getSubtotal(),order.getVat(),order.getTotal(),order.getItemCount(),json.readValue(order.getItemsJson(),Item[].class),order.getCreatedAt(),order.getUpdatedAt());}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Order data is unavailable");}}
+    private DeliveryAddress delivery(DeliveryAddress input,com.wefyx.support.user.SupportUser account,String email){
+        if(input!=null&&input.id()!=null){
+            var saved=addresses.findByIdAndCustomerEmailIgnoreCase(input.id(),email).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"Choose a valid delivery address"));
+            return new DeliveryAddress(saved.getId(),saved.getLabel(),saved.getContactName(),saved.getPhone(),saved.getAddressLine(),saved.getEmirate(),saved.getCountry(),saved.getLatitude(),saved.getLongitude());
+        }
+        if(input!=null&&!blank(input.addressLine())) return clean(input,account);
+        var saved=addresses.findByCustomerEmailIgnoreCaseOrderByDefaultAddressDescUpdatedAtDesc(email).stream().findFirst();
+        if(saved.isPresent()){
+            var item=saved.get();
+            return new DeliveryAddress(item.getId(),item.getLabel(),item.getContactName(),item.getPhone(),item.getAddressLine(),item.getEmirate(),item.getCountry(),item.getLatitude(),item.getLongitude());
+        }
+        if(!blank(account.getAddress())) return new DeliveryAddress(null,"Primary",account.getName(),account.getPhone(),account.getAddress(),value(account.getEmirate(),"Dubai"),value(account.getCountry(),"United Arab Emirates"),null,null);
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Delivery address is required");
+    }
+    private DeliveryAddress clean(DeliveryAddress input,com.wefyx.support.user.SupportUser account){
+        return new DeliveryAddress(input.id(),value(input.label(),"Delivery address"),value(input.contactName(),account.getName()),value(input.phone(),account.getPhone()),required(input.addressLine(),"Delivery address"),value(input.emirate(),"Dubai"),value(input.country(),"United Arab Emirates"),input.latitude(),input.longitude());
+    }
+    private View view(CustomerOrder order){try{return new View(order.getId(),order.getReference(),order.getStatus(),order.getCurrency(),order.getSubtotal(),order.getVat(),order.getTotal(),order.getItemCount(),json.readValue(order.getItemsJson(),Item[].class),new DeliveryAddress(null,order.getDeliveryLabel(),order.getDeliveryContactName(),order.getDeliveryPhone(),order.getDeliveryAddress(),order.getDeliveryEmirate(),order.getDeliveryCountry(),order.getDeliveryLatitude(),order.getDeliveryLongitude()),order.getCreatedAt(),order.getUpdatedAt());}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Order data is unavailable");}}
     private static BigDecimal bd(long value){return BigDecimal.valueOf(value);}
     private static void bad(String message){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,message);}
+    private static boolean blank(String value){return value==null||value.isBlank();}
+    private static String value(String value,String fallback){return blank(value)?fallback:value.trim();}
+    private static String required(String value,String label){if(blank(value))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,label+" is required");return value.trim();}
 
-    public record Create(List<Item> items) {}
+    public record Create(List<Item> items,DeliveryAddress deliveryAddress) {}
+    public record DeliveryAddress(Long id,String label,String contactName,String phone,String addressLine,String emirate,String country,Double latitude,Double longitude) {}
     public record Item(String productId,String name,String mode,BigDecimal unitPrice,int quantity,int months,BigDecimal lineTotal) {}
-    public record View(Long id,String reference,String status,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal total,Integer itemCount,Item[] items,LocalDateTime createdAt,LocalDateTime updatedAt) {}
+    public record View(Long id,String reference,String status,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal total,Integer itemCount,Item[] items,DeliveryAddress deliveryAddress,LocalDateTime createdAt,LocalDateTime updatedAt) {}
 }

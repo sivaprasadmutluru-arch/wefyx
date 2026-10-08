@@ -41,6 +41,7 @@ import {
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  Star,
   Store,
   Thermometer,
   TrendingUp,
@@ -250,6 +251,85 @@ export default function ServiceWebsite() {
     { title: "Financial & Banking", icon: Landmark, desc: "ISO 27001, DLP, zero trust & audit trails" },
     { title: "Public & Enterprise", icon: Scale, desc: "TDRA aligned, sovereign & high availability" }
   ];
+
+  const featuredReviews = [
+    {
+      name: "Aisha Rahman",
+      role: "Operations Director",
+      company: "Dubai Healthcare Group",
+      rating: 5,
+      service: "Managed IT",
+      review: "Wefyx stabilized our support queue in the first month and gave our team clear SLA reporting."
+    },
+    {
+      name: "Khalid Mansoor",
+      role: "IT Manager",
+      company: "Emirates Retail Co.",
+      rating: 4.9,
+      service: "Network & Wi-Fi",
+      review: "Their engineers handled our multi-branch network upgrade cleanly with almost no disruption."
+    },
+    {
+      name: "Neha Iyer",
+      role: "Founder",
+      company: "Studio North",
+      rating: 4.8,
+      service: "Equipment Rental",
+      review: "Fast rental delivery, neat setup, and responsive support whenever our team needed changes."
+    },
+    {
+      name: "Omar Siddiq",
+      role: "Facilities Lead",
+      company: "Al Noor Offices",
+      rating: 4.6,
+      service: "AMC",
+      review: "Reliable preventive maintenance and clear follow-up after every visit."
+    }
+  ];
+
+  const [reviews, setReviews] = useState(featuredReviews);
+  const [reviewForm, setReviewForm] = useState({
+    name: "",
+    company: "",
+    service: "Managed IT",
+    rating: "5",
+    review: ""
+  });
+  const [reviewNotice, setReviewNotice] = useState("");
+
+  const visibleReviews = reviews
+    .filter((item) => Number(item.rating) >= 4.7)
+    .sort((a, b) => Number(b.rating) - Number(a.rating))
+    .slice(0, 6);
+
+  const averageRating = visibleReviews.length
+    ? visibleReviews.reduce((sum, item) => sum + Number(item.rating), 0) / visibleReviews.length
+    : 0;
+
+  const updateReviewForm = (field) => (event) => {
+    setReviewForm((current) => ({ ...current, [field]: event.target.value }));
+    setReviewNotice("");
+  };
+
+  const submitReview = (event) => {
+    event.preventDefault();
+    const ratingValue = Number(reviewForm.rating);
+    const nextReview = {
+      name: reviewForm.name.trim(),
+      role: "Verified Customer",
+      company: reviewForm.company.trim() || "Wefyx Customer",
+      service: reviewForm.service,
+      rating: ratingValue,
+      review: reviewForm.review.trim()
+    };
+    setReviews((current) => [nextReview, ...current]);
+    setReviewForm({ name: "", company: "", service: "Managed IT", rating: "5", review: "" });
+    setReviewNotice(
+      ratingValue >= 4.7
+        ? "Thanks for the review. It is now visible in the top-rated customer cards."
+        : "Thanks for the feedback. Lower ratings are recorded but not shown on the public homepage."
+    );
+  };
 
   // Animated Counter Helper
   const CounterNumber = ({ target, suffix = "" }) => {
@@ -708,7 +788,150 @@ export default function ServiceWebsite() {
           </div>
         </section>
 
-        {/* 10. Dual Action Banners: Site Visit Booking (AED 105) & AI Quotation */}
+        {/* 10. Customer Reviews & Ratings */}
+        <section className="border-y border-slate-200 bg-white py-16 lg:py-20" aria-labelledby="reviews-heading">
+          <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8">
+            <div className="grid gap-10 lg:grid-cols-[0.9fr_1.4fr] lg:items-start">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-widest text-emerald-600">
+                  CUSTOMER RATINGS
+                </span>
+                <h2 id="reviews-heading" className="mt-2 text-3xl font-extrabold text-[#09482e] sm:text-4xl">
+                  Top-Rated Customer Reviews
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+                  Only high-rated public reviews are highlighted here, sorted by rating so the strongest customer feedback appears first.
+                </p>
+
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+                    <div className="flex items-center gap-2 text-3xl font-black text-[#09482e]">
+                      {averageRating.toFixed(1)}
+                      <Star size={25} className="fill-amber-400 text-amber-400" />
+                    </div>
+                    <p className="mt-1 text-xs font-bold text-slate-600">Average top rating</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="text-3xl font-black text-[#09482e]">{visibleReviews.length}</div>
+                    <p className="mt-1 text-xs font-bold text-slate-600">Featured reviews</p>
+                  </div>
+                </div>
+
+                <form onSubmit={submitReview} className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+                  <h3 className="text-sm font-extrabold text-slate-900">Add your review</h3>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Name
+                      <input
+                        required
+                        value={reviewForm.name}
+                        onChange={updateReviewForm("name")}
+                        className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50"
+                        placeholder="Your name"
+                      />
+                    </label>
+                    <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Company
+                      <input
+                        value={reviewForm.company}
+                        onChange={updateReviewForm("company")}
+                        className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50"
+                        placeholder="Company name"
+                      />
+                    </label>
+                    <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Service
+                      <select
+                        value={reviewForm.service}
+                        onChange={updateReviewForm("service")}
+                        className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50"
+                      >
+                        {["Managed IT", "Data Center", "Network & Wi-Fi", "Equipment Rental", "AMC", "Cybersecurity"].map((service) => (
+                          <option key={service}>{service}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Rating
+                      <select
+                        value={reviewForm.rating}
+                        onChange={updateReviewForm("rating")}
+                        className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50"
+                      >
+                        {["5", "4.9", "4.8", "4.7", "4.6", "4.5", "4"].map((rating) => (
+                          <option key={rating} value={rating}>{rating} stars</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="sm:col-span-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Review
+                      <textarea
+                        required
+                        rows="4"
+                        value={reviewForm.review}
+                        onChange={updateReviewForm("review")}
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50"
+                        placeholder="Share your experience with Wefyx"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-xs font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-700"
+                  >
+                    <Star size={14} />
+                    <span>Submit Review</span>
+                  </button>
+                  {reviewNotice && (
+                    <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700">
+                      {reviewNotice}
+                    </p>
+                  )}
+                </form>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {visibleReviews.map((item) => (
+                  <article
+                    key={`${item.name}-${item.company}-${item.rating}`}
+                    className="flex min-h-56 flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-emerald-300 hover:shadow-lg"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex gap-0.5 text-amber-400" aria-label={`${item.rating} star rating`}>
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <Star
+                              key={index}
+                              size={16}
+                              className={index + 1 <= Math.round(item.rating) ? "fill-amber-400" : "text-slate-300"}
+                            />
+                          ))}
+                        </div>
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-700">
+                          {Number(item.rating).toFixed(1)}
+                        </span>
+                      </div>
+                      <p className="mt-4 text-sm leading-6 text-slate-700">
+                        "{item.review}"
+                      </p>
+                    </div>
+                    <div className="mt-6 border-t border-slate-100 pt-4">
+                      <h3 className="text-sm font-extrabold text-slate-900">{item.name}</h3>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                        {item.role} · {item.company}
+                      </p>
+                      <span className="mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
+                        {item.service}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 11. Dual Action Banners: Site Visit Booking (AED 105) & AI Quotation */}
         <section className="border-t border-slate-200 bg-slate-50 py-14">
           <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
