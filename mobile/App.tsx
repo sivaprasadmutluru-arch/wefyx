@@ -354,14 +354,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setMessage('Enter a valid email address or UAE mobile number.');
       return;
     }
-    if (password.length < 6) {
+    if (!isPhone && password.length < 6) {
       setMessage('Password must contain at least 6 characters.');
       return;
     }
     setBusy(true);
     try {
       if(isPhone){
-        const sent=await apiRequestLoginOtp(normalizePhone(identifier),password);
+        const sent=await apiRequestLoginOtp(normalizePhone(identifier));
         setLoginPhone(sent.phone);
         setLoginOtp('');
         setOtpPending(true);
@@ -379,7 +379,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setMessage('');
     if(!/^[0-9]{6}$/.test(loginOtp)){setMessage('Enter the 6-digit OTP.');return;}
     setBusy(true);
-    try{await finishLogin(await apiVerifyPhoneLogin(loginPhone,password,loginOtp));}
+    try{await finishLogin(await apiVerifyPhoneLogin(loginPhone,loginOtp));}
     catch(error){setMessage(error instanceof Error ? error.message : 'Unable to verify OTP.');}
     finally{setBusy(false);}
   }
@@ -459,7 +459,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
                       </View>
                     </>
                   ) : null}
-                  <View className="mb-2 mt-4 flex-row items-center justify-between">
+                  {email.trim().replace(/\s+/g, '').match(/^\+?\d+$/) ? null : <View className="mb-2 mt-4 flex-row items-center justify-between">
                     <Text className="font-semibold text-xs text-textSecondary">
                       PASSWORD
                     </Text>
@@ -473,8 +473,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
                         Forgot password?
                       </Text>
                     </Pressable>
-                  </View>
-                  <View className="h-14 flex-row items-center rounded-2xl bg-inputBg px-4">
+                  </View>}
+                  {email.trim().replace(/\s+/g, '').match(/^\+?\d+$/) ? null : <View className="h-14 flex-row items-center rounded-2xl bg-inputBg px-4">
                     <KeyRound size={18} color="#075438" />
                     <TextInput
                       value={password}
@@ -493,7 +493,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
                         <Eye size={19} color="#63796C" />
                       )}
                     </Pressable>
-                  </View>
+                  </View>}
                   {message ? (
                     <Text className="mt-3 text-xs font-semibold text-red-500">
                       {message}

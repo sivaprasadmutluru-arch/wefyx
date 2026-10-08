@@ -111,7 +111,7 @@ public class AuthController {
 
     @PostMapping("/login/send-otp")
     public Map<String, Object> sendLoginOtp(@RequestBody LoginRequest request) {
-        var user = requirePhonePasswordUser(request);
+        var user = requirePhoneUser(request == null ? null : request.phone());
         String phone = otpService.send(user.getPhone());
         return Map.of("success", true, "message", otpMessage(phone), "phone", phone,
             "delivery", otpService.isLocal() ? "console" : "sms");
@@ -119,21 +119,19 @@ public class AuthController {
 
     @PostMapping("/login/verify")
     public ResponseEntity<?> verifyPhoneLogin(@RequestBody PhoneLoginRequest request) {
-        var user = requirePhonePasswordUser(new LoginRequest(null, request.phone(), request.password()));
+        var user = requirePhoneUser(request == null ? null : request.phone());
         otpService.verify(user.getPhone(), request.otp());
         user.setLastLogin(java.time.LocalDateTime.now());
         users.save(user);
         return session(user);
     }
 
-    private SupportUser requirePhonePasswordUser(LoginRequest request) {
-        if (request == null || request.phone() == null || request.phone().isBlank() || request.password() == null || request.password().isBlank())
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Mobile number and password are required.");
-        String phone = OtpService.normalize(request.phone());
+    private SupportUser requirePhoneUser(String rawPhone) {
+        if (rawPhone == null || rawPhone.isBlank())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Mobile number is required.");
+        String phone = OtpService.normalize(rawPhone);
         var user = users.findByPhone(phone)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid mobile number or password."));
-        if (user.getPasswordHash() == null || !passwords.matches(request.password(), user.getPasswordHash()))
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid mobile number or password.");
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No active account found for this mobile number."));
         if (user.getStatus() == UserStatus.PENDING)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Your " + loginRole(user.getRole()).toLowerCase() + " registration is pending admin approval.");
         if (user.getStatus() != UserStatus.ACTIVE)
@@ -250,7 +248,7 @@ public class AuthController {
     }
 
     public record LoginRequest(String email, String phone, String password){}
-    public record PhoneLoginRequest(String phone, String password, String otp){}
+    public record PhoneLoginRequest(String phone, String otp){}
     public record RegistrationRequest(
         @NotBlank @Size(max=120) String name,
         @NotBlank @Email @Size(max=254) String email,

@@ -367,20 +367,23 @@ export default function PublicRegistration({ initialView = "login" }) {
 
   async function requestPhoneOrEmailLogin() {
     const id = loginForm.identifier.trim();
-    if (!id || !loginForm.password) {
-      return setError("Please enter your email or mobile number and password.");
+    if (!id) {
+      return setError("Please enter your email or mobile number.");
     }
     setBusy(true);
     try {
       const isPhone = id.replace(/\s+/g, "").match(/^\+?\d+$/);
       if (isPhone) {
         const phone = normalizeLoginPhone(id);
-        const result = await sendPublic("/auth/login/send-otp", "POST", { phone, password: loginForm.password });
+        const result = await sendPublic("/auth/login/send-otp", "POST", { phone });
         setLoginForm((curr) => ({ ...curr, verifiedPhone: result.phone, otp: "" }));
         setSuccess(result.message);
         setTimer(30);
         setView("loginOtp");
         return;
+      }
+      if (!loginForm.password) {
+        return setError("Please enter your password.");
       }
       const payload = isPhone
         ? { phone: id, password: loginForm.password }
@@ -410,7 +413,6 @@ export default function PublicRegistration({ initialView = "login" }) {
     try {
       const res = await sendPublic("/auth/login/verify", "POST", {
         phone: loginForm.verifiedPhone,
-        password: loginForm.password,
         otp: loginForm.otp,
       });
       if (res.token) {
@@ -1157,7 +1159,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                   </div>
                 </div>
 
-                <div className="wf-form-group">
+                {loginForm.identifier.trim().replace(/\s+/g, "").match(/^\+?\d+$/) ? null : <div className="wf-form-group">
                   <div className="flex items-center justify-between">
                     <label className="wf-form-label" htmlFor="login-pass">
                       Password
@@ -1193,7 +1195,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                </div>
+                </div>}
 
                 <div className="wf-remember-row">
                   <label className="wf-checkbox-label">

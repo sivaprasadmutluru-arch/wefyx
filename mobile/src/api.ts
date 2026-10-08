@@ -84,7 +84,6 @@ async function read<T>(response: Response): Promise<T> {
 export async function apiLogin(identifier: string, password: string) {
   await ensureConnected();
   const clean = identifier.trim();
-  const isPhone = /^\+?\d[\d\s()-]+$/.test(clean);
   return read<{
     token: string;
     user: { name: string; email: string; role: string };
@@ -92,23 +91,23 @@ export async function apiLogin(identifier: string, password: string) {
     await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isPhone ? { phone: clean, password } : { email: clean, password }),
+      body: JSON.stringify({ email: clean, password }),
     }),
   );
 }
 
-export async function apiRequestLoginOtp(phone: string, password: string) {
+export async function apiRequestLoginOtp(phone: string) {
   await ensureConnected();
   return read<{ success: boolean; message: string; phone: string; delivery: string }>(
     await fetch(`${API_BASE}/auth/login/send-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password }),
+      body: JSON.stringify({ phone }),
     }),
   );
 }
 
-export async function apiVerifyPhoneLogin(phone: string, password: string, otp: string) {
+export async function apiVerifyPhoneLogin(phone: string, otp: string) {
   await ensureConnected();
   return read<{
     token: string;
@@ -117,7 +116,7 @@ export async function apiVerifyPhoneLogin(phone: string, password: string, otp: 
     await fetch(`${API_BASE}/auth/login/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password, otp }),
+      body: JSON.stringify({ phone, otp }),
     }),
   );
 }

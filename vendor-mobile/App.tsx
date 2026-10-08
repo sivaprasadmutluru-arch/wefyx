@@ -635,7 +635,7 @@ function Login({ done }: { done: (u: User) => void }) {
       const identifier=email.trim();
       const isPhone=/^\+?\d[\d\s()-]+$/.test(identifier);
       if(isPhone){
-        const sent=await apiRequestLoginOtp(normalizePhone(identifier),password);
+        const sent=await apiRequestLoginOtp(normalizePhone(identifier));
         setLoginPhone(sent.phone);
         setLoginOtp("");
         setOtpPending(true);
@@ -653,7 +653,7 @@ function Login({ done }: { done: (u: User) => void }) {
     setError("");
     try {
       if(!/^[0-9]{6}$/.test(loginOtp)) throw new Error("Enter the 6-digit OTP.");
-      await finishLogin(await apiVerifyPhoneLogin(loginPhone,password,loginOtp));
+      await finishLogin(await apiVerifyPhoneLogin(loginPhone,loginOtp));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to verify OTP");
     } finally {
@@ -685,7 +685,7 @@ function Login({ done }: { done: (u: User) => void }) {
           keyboardType="email-address"
           placeholder="vendor@company.com or +971501234567"
         />
-        <Text style={s.label}>Password</Text>
+        {/^\+?\d[\d\s()-]+$/.test(email.trim()) ? null : <><Text style={s.label}>Password</Text>
         <TextInput
           style={s.input}
           value={password}
@@ -693,6 +693,7 @@ function Login({ done }: { done: (u: User) => void }) {
           secureTextEntry
           placeholder="Enter password"
         />
+        </>}
         {otpPending && <>
           <Text style={s.label}>SMS OTP</Text>
           <TextInput

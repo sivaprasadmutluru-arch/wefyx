@@ -56,7 +56,7 @@ class UserIdentityTest {
         }
     }
 
-    @Test void loginRequiresTheRegisteredPasswordForEmailAndMobile() throws Exception {
+    @Test void loginRequiresPasswordForEmailAndOtpOnlyForMobile() throws Exception {
         mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
             .content(json.writeValueAsString(registration("password-check@example.com", "+971509876543"))))
             .andExpect(status().isCreated());
@@ -71,14 +71,14 @@ class UserIdentityTest {
                     .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123"))))
                     .andExpect(status().isPreconditionRequired());
                 mvc.perform(post("/api/auth/login/send-otp").contentType(MediaType.APPLICATION_JSON)
-                    .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123"))))
+                    .content(json.writeValueAsString(Map.of(key, identifier))))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("+971509876543"));
                 mvc.perform(post("/api/auth/login/verify").contentType(MediaType.APPLICATION_JSON)
-                    .content(json.writeValueAsString(Map.of(key, identifier, "password", "TestPassword123", "otp", "123456"))))
+                    .content(json.writeValueAsString(Map.of(key, identifier, "otp", "123456"))))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty());
             }
             for (String wrong : new String[]{"incorrect", "Password@123", "admin@123", "customer@123", "vendor@123", "employee@123"})
-                mvc.perform(post(identifier.contains("@") ? "/api/auth/login" : "/api/auth/login/send-otp").contentType(MediaType.APPLICATION_JSON)
+                if (identifier.contains("@")) mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                     .content(json.writeValueAsString(Map.of(key, identifier, "password", wrong))))
                     .andExpect(status().isUnauthorized());
         }
