@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Pencil,
@@ -9,12 +9,16 @@ import {
   Phone,
   MapPin,
   ShieldCheck,
-  Monitor,
+  ShoppingBag,
+  ClipboardList,
+  Ticket,
+  BriefcaseBusiness,
+  Store,
+  ScrollText,
   CheckCircle2,
   Shield,
-  Check,
 } from "lucide-react";
-import { send } from "./api";
+import { get, send } from "./api";
 
 const InfoCard = ({ title, children, action = "Edit", onAction }) => (
   <section className="card p-5">
@@ -41,6 +45,36 @@ const Row = ({ label, value }) => (
   </div>
 );
 
+const textStatus = (value = "") => String(value || "—").replaceAll("_", " ").replace(/\b\w/g, (x) => x.toUpperCase());
+const formatDate = (value) => value ? new Date(value).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" }) : "—";
+const money = (value) => `AED ${Number(value || 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+const contains = (value, needle) => String(value || "").toLowerCase().includes(String(needle || "").toLowerCase());
+const roleKind = (role = "") => {
+  const value = role.toUpperCase();
+  if (value.includes("VENDOR") || value.includes("PARTNER")) return "vendor";
+  if (value.includes("TECH") || value.includes("ENGINEER") || value.includes("NOC") || value.includes("AGENT") || value.includes("OPERATIONS") || value.includes("SERVICE DELIVERY")) return "employee";
+  if (value.includes("SUPER") || value.includes("ADMIN")) return "admin";
+  return "customer";
+};
+
+function MiniHistory({ title, icon: Icon, rows, empty, render }) {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 5;
+  const filtered = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => setPage(1), [query, rows.length]);
+  return <section className="card p-5">
+    <div className="mb-4 flex items-center justify-between">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900"><Icon size={16} className="text-brand"/>{title}</h3>
+      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">{rows.length}</span>
+    </div>
+    {rows.length ? <><label className="mb-3 flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3"><Search size={13} className="text-slate-400"/><input value={query} onChange={(e)=>setQuery(e.target.value)} className="w-full bg-transparent text-xs outline-none" placeholder={`Filter ${title.toLowerCase()}...`}/></label><div className="space-y-3">{paged.map(render)}</div>{filtered.length>pageSize&&<div className="mt-4 flex items-center justify-between text-[10px] text-slate-500"><span>{(page-1)*pageSize+1}-{Math.min(page*pageSize,filtered.length)} of {filtered.length}</span><div className="flex gap-1"><button disabled={page===1} onClick={()=>setPage((x)=>Math.max(1,x-1))} className="h-7 w-7 rounded-lg border disabled:opacity-40">‹</button><button disabled={page===totalPages} onClick={()=>setPage((x)=>Math.min(totalPages,x+1))} className="h-7 w-7 rounded-lg border disabled:opacity-40">›</button></div></div>}{!filtered.length&&<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-500">No records match this filter.</p>}</> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-500">{empty}</p>}
+  </section>;
+}
+
 const STANDARD_ROLES = [
   "Customer",
   "Customer Admin",
@@ -63,6 +97,47 @@ export default function UserDetailsPage({ user: initialUser, onBack }) {
   const [selectedRole, setSelectedRole] = useState(user.role || "Customer");
   const [savingRole, setSavingRole] = useState(false);
   const [toast, setToast] = useState(null);
+  const [history, setHistory] = useState({ orders: [], requirements: [], tickets: [], employeeRequirements: [], vendorRequirements: [], employeeTickets: [], vendorQuotes: [], auditEvents: [], metrics: {} });
+
+  useEffect(() => {
+    let active = true;
+    get(`/admin/users/${user.id}/insights`).then((insights) => {
+      if (!active) return;
+      setHistory({
+        orders: insights.orders || [],
+        requirements: insights.customerRequirements || [],
+        tickets: insights.customerTickets || [],
+        employeeRequirements: insights.employeeRequirements || [],
+        vendorRequirements: insights.vendorRequirements || [],
+        employeeTickets: insights.employeeTickets || [],
+        vendorQuotes: insights.vendorQuotes || [],
+        auditEvents: insights.auditEvents || [],
+        metrics: insights.metrics || {},
+      });
+    }).catch(() => {
+      Promise.all([
+        get("/orders").catch(() => []),
+        get("/requirements").catch(() => []),
+        get("/tickets").catch(() => []),
+      ]).then(([orders, requirements, tickets]) => {
+        if (!active) return;
+        setHistory({ orders: Array.isArray(orders) ? orders : [], requirements: Array.isArray(requirements) ? requirements : [], tickets: Array.isArray(tickets) ? tickets : [], employeeRequirements: [], vendorRequirements: [], employeeTickets: [], vendorQuotes: [], auditEvents: [], metrics: {} });
+      });
+    });
+    return () => { active = false; };
+  }, [user.id]);
+
+  const about = useMemo(() => {
+    const kind = roleKind(user.role);
+    const orders = history.orders.filter((order) => same(order.customerEmail, user.email) || same(order.customerName, user.name) || same(order.organization, user.organization));
+    const customerRequirements = history.requirements.filter((item) => same(item.customerEmail, user.email) || same(item.organization, user.organization));
+    const employeeRequirements = history.employeeRequirements.length ? history.employeeRequirements : history.requirements.filter((item) => same(item.employeeEmail, user.email) || same(item.employeeName, user.name));
+    const vendorRequirements = history.vendorRequirements.length ? history.vendorRequirements : history.requirements.filter((item) => same(item.vendorName, user.email) || same(item.vendorName, user.name) || contains(item.vendorName, user.organization));
+    const tickets = history.tickets.filter((ticket) => same(ticket.customerEmail, user.email) || same(ticket.assigneeEmail, user.email) || same(ticket.customer, user.organization));
+    const employeeTickets = history.employeeTickets.length ? history.employeeTickets : history.tickets.filter((ticket) => same(ticket.assigneeEmail, user.email) || same(ticket.assignee, user.name));
+    const totalOrderValue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    return { kind, orders, customerRequirements, employeeRequirements, vendorRequirements, tickets, employeeTickets, vendorQuotes: history.vendorQuotes, auditEvents: history.auditEvents, metrics: history.metrics, totalOrderValue };
+  }, [history, user]);
 
   const initials = (user.name || "U")
     .split(" ")
@@ -274,12 +349,11 @@ export default function UserDetailsPage({ user: initialUser, onBack }) {
       {/* Tabs */}
       <div className="card flex gap-7 overflow-x-auto px-5 pt-4">
         {[
-          "Overview",
+          "About",
+          "Order History",
+          "Requirement History",
+          about.kind === "vendor" ? "Vendor History" : about.kind === "employee" ? "Employee Work" : "Tickets",
           "Roles & Permissions",
-          "Organizations",
-          "Assets",
-          "Contracts (AMC)",
-          "Tickets",
           "Activity Log",
         ].map((x, i) => (
           <button
@@ -300,8 +374,8 @@ export default function UserDetailsPage({ user: initialUser, onBack }) {
             <Row label="Full Name" value={user.name} />
             <Row label="Email Address" value={user.email} />
             <Row label="Phone Number" value={user.phone || "+971 50 123 4567"} />
-            <Row label="Nationality" value="UAE Resident" />
-            <Row label="Language" value="English" />
+            <Row label="Account Type" value={textStatus(about.kind)} />
+            <Row label="Organization" value={user.organization || "—"} />
             <Row label="Address" value={user.location || "Dubai, UAE"} />
           </InfoCard>
           <InfoCard title="Contact & Security">
@@ -317,26 +391,22 @@ export default function UserDetailsPage({ user: initialUser, onBack }) {
             <Row label="Current Role" value={user.role || "Customer"} />
             <Row label="Organization" value={user.organization || "ACME Trading LLC"} />
             <Row label="Access Scope" value="Role-Based Controls" />
-            <Row label="Default Portal" value={user.role === "Super Admin" ? "Admin Console" : "Customer Portal"} />
+            <Row label="Default Portal" value={about.kind === "admin" ? "Admin Console" : about.kind === "vendor" ? "Vendor Portal" : about.kind === "employee" ? "Employee Portal" : "Customer Portal"} />
           </InfoCard>
-          <InfoCard title="Device & Access" action="View All">
+          <InfoCard title="Live History Summary" action={null}>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-xs text-slate-400">Registered Devices</span>
-                <b className="mt-1 block text-xl">2</b>
+                <span className="text-xs text-slate-400">Orders</span>
+                <b className="mt-1 block text-xl">{about.metrics.orders ?? about.orders.length}</b>
               </div>
               <div>
-                <span className="text-xs text-slate-400">Active Sessions</span>
-                <b className="mt-1 block text-xl">1</b>
+                <span className="text-xs text-slate-400">Order Value</span>
+                <b className="mt-1 block text-xl">{money(about.metrics.orderValue ?? about.totalOrderValue)}</b>
               </div>
             </div>
-            <div className="mt-5 flex gap-3">
-              <Monitor className="text-brand" />
-              <div>
-                <b className="text-xs">Chrome on Windows</b>
-                <div className="text-[10px] text-slate-400">Last active today</div>
-              </div>
-            </div>
+            <Row label="Requirements" value={(about.metrics.customerRequirements || 0) + (about.metrics.employeeRequirements || 0) + (about.metrics.vendorRequirements || 0)} />
+            <Row label="Tickets" value={(about.metrics.customerTickets || 0) + (about.metrics.employeeTickets || 0)} />
+            <Row label="Audit Events" value={about.metrics.auditEvents || about.auditEvents.length} />
           </InfoCard>
         </div>
 
@@ -371,9 +441,11 @@ export default function UserDetailsPage({ user: initialUser, onBack }) {
           </div>
           <div className="mt-5 space-y-5">
             {[
-              ["User logged in", "Today, 10:24 AM", CheckCircle2, "text-emerald-500"],
-              ["Role verified", "Today, 10:20 AM", ShieldCheck, "text-emerald-500"],
-              ["Account active", "Current session", Shield, "text-emerald-500"],
+              ...(about.orders[0] ? [[`Order ${about.orders[0].reference}`, formatDate(about.orders[0].createdAt), ShoppingBag, "text-emerald-500"]] : []),
+              ...(about.customerRequirements[0] ? [[`Requirement ${about.customerRequirements[0].reference || about.customerRequirements[0].id}`, formatDate(about.customerRequirements[0].createdAt), ClipboardList, "text-emerald-500"]] : []),
+              ...(about.employeeTickets[0] ? [[`Ticket ${about.employeeTickets[0].reference}`, formatDate(about.employeeTickets[0].createdAt), Ticket, "text-emerald-500"]] : []),
+              ["Role verified", user.role || "Customer", ShieldCheck, "text-emerald-500"],
+              ["Account active", user.status || "ACTIVE", Shield, "text-emerald-500"],
             ].map(([x, d, Icon, c]) => (
               <div key={x} className="flex gap-3">
                 <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-50 ${c}`}>
@@ -388,6 +460,12 @@ export default function UserDetailsPage({ user: initialUser, onBack }) {
           </div>
         </section>
       </div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <MiniHistory title="Order History" icon={ShoppingBag} rows={about.orders} empty="No customer orders found for this user yet." render={(order)=><div key={order.id} className="rounded-xl border border-slate-100 p-3 text-xs"><div className="flex justify-between gap-3"><b>{order.reference}</b><span className="font-bold text-emerald-700">{money(order.total)}</span></div><div className="mt-1 text-slate-500">{formatDate(order.createdAt)} · {textStatus(order.status)} · {order.itemCount} item(s)</div>{order.deliveryAddress?.addressLine&&<div className="mt-2 text-[11px] leading-5 text-slate-500">{order.deliveryAddress.addressLine}, {order.deliveryAddress.emirate}</div>}</div>}/>
+        <MiniHistory title="Requirement History" icon={ClipboardList} rows={[...about.customerRequirements, ...about.employeeRequirements].filter((item,index,array)=>array.findIndex(row=>row.id===item.id)===index)} empty="No requirements connected to this user yet." render={(item)=><div key={item.id} className="rounded-xl border border-slate-100 p-3 text-xs"><div className="flex justify-between gap-3"><b>{item.reference || `REQ-${item.id}`}</b><span className="font-bold text-emerald-700">{textStatus(item.status)}</span></div><div className="mt-1 text-slate-500">{item.title || item.category} · {formatDate(item.createdAt)}</div><div className="mt-2 text-[11px] text-slate-500">Customer: {item.customerName || item.customerEmail || "—"}</div></div>}/>
+        <MiniHistory title={about.kind === "vendor" ? "Vendor History" : about.kind === "employee" ? "Employee History" : "Ticket History"} icon={about.kind === "vendor" ? Store : about.kind === "employee" ? BriefcaseBusiness : Ticket} rows={about.kind === "vendor" ? about.vendorRequirements : about.kind === "employee" ? about.employeeTickets : about.tickets} empty={about.kind === "vendor" ? "No vendor quotations or selected requirement history found yet." : about.kind === "employee" ? "No assigned employee ticket history found yet." : "No support tickets found for this customer yet."} render={(item)=><div key={`${item.reference || item.id}`} className="rounded-xl border border-slate-100 p-3 text-xs"><div className="flex justify-between gap-3"><b>{item.reference || `REQ-${item.id}`}</b><span className="font-bold text-emerald-700">{textStatus(item.status)}</span></div><div className="mt-1 text-slate-500">{item.subject || item.title || item.category || "Activity"} · {formatDate(item.createdAt)}</div><div className="mt-2 text-[11px] text-slate-500">{about.kind === "vendor" ? `Vendor: ${item.vendorName || user.name}` : about.kind === "employee" ? `Assignee: ${item.assignee || user.name}` : `Customer: ${item.customer || user.organization || "—"}`}</div></div>}/>
+      </div>
+      <MiniHistory title="Audit Trail" icon={ScrollText} rows={about.auditEvents} empty="No audit trail events found for this user yet." render={(item)=><div key={item.id} className="rounded-xl border border-slate-100 p-3 text-xs"><div className="flex justify-between gap-3"><b>{item.name}</b><span className="font-bold text-emerald-700">{item.status}</span></div><div className="mt-1 text-slate-500">{formatDate(item.createdAt)} · {item.owner || "System"}</div><div className="mt-2 text-[11px] text-slate-500">{item.details}</div></div>}/>
     </div>
   );
 }

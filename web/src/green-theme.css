@@ -55,6 +55,32 @@ button:not(:disabled), summary { cursor: pointer; }
   --sblue: var(--wf-green);
 }
 
+/* Admin workspace uses the same green system as the public website. */
+.wf-admin-shell {
+  --blue: var(--wf-green);
+  --brand: var(--wf-green);
+  --tw-ring-color: #00855333;
+  background: var(--wf-bg);
+  color: #14291f;
+}
+.wf-admin-shell :is([class*="bg-blue"], [class*="bg-sky"], [class*="bg-cyan"], [class*="bg-indigo"]) {
+  background-color: #effaf5 !important;
+}
+.wf-admin-shell :is([class*="text-blue"], [class*="text-sky"], [class*="text-cyan"], [class*="text-indigo"]) {
+  color: var(--wf-green) !important;
+}
+.wf-admin-shell :is([class*="border-blue"], [class*="border-sky"], [class*="border-cyan"], [class*="border-indigo"]) {
+  border-color: #83d4af !important;
+}
+.wf-admin-shell :is([class*="from-blue"], [class*="from-sky"], [class*="from-cyan"], [class*="from-indigo"]) {
+  --tw-gradient-from: var(--wf-navy) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(7 59 46 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.wf-admin-shell :is([class*="to-blue"], [class*="to-sky"], [class*="to-cyan"], [class*="to-indigo"]) {
+  --tw-gradient-to: #008553 var(--tw-gradient-to-position) !important;
+}
+
 /* Dialog backdrops fill the viewport; only their panels scroll. */
 [role='dialog'] > .relative {
   max-height: calc(100dvh - 24px);

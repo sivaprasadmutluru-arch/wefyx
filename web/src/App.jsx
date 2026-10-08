@@ -1,7 +1,7 @@
 import { AuthVisual, Brand } from "./WefyxUI";
 import BookingFlow from "./BookingFlow";
 import ServiceTickets from "./ServiceTickets";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -121,6 +121,7 @@ const sections = [
     "SERVICE MANAGEMENT",
     [
       ["Requirements & Quotes", ReceiptText],
+      ["Orders", ShoppingCart],
       ["Tickets", Ticket],
       ["Technicians", Headphones],
       ["Contracts (AMC)", FileClock],
@@ -640,6 +641,129 @@ function Dashboard() {
     </div>
   );
 }
+
+function AdminOrdersPage() {
+  const [orders, setOrders] = useState([]);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("ALL");
+  const [mode, setMode] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
+  const [serverStats, setServerStats] = useState({ activeOrders: 0, completedOrders: 0, orderValue: 0 });
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+  const statuses = ["PLACED", "CONFIRMED", "PROCESSING", "DISPATCHED", "COMPLETED", "CANCELLED"];
+  const text = (value = "") => String(value || "—").replaceAll("_", " ").replace(/\b\w/g, (x) => x.toUpperCase());
+  const date = (value) => value ? new Date(value).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" }) : "—";
+  const amount = (value) => `AED ${Number(value || 0).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const badgeTone = (value = "") => {
+    if (["COMPLETED", "CONFIRMED"].includes(value)) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (["CANCELLED"].includes(value)) return "bg-red-50 text-red-700 border-red-200";
+    if (["PROCESSING", "DISPATCHED"].includes(value)) return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-slate-100 text-slate-700 border-slate-200";
+  };
+  const load = () => {
+    const params = new URLSearchParams({ q, status, mode, page: String(page - 1), size: String(pageSize) });
+    if (dateFrom) params.set("from", dateFrom);
+    if (dateTo) params.set("to", dateTo);
+    return get(`/orders/search?${params}`).then((result) => {
+      setOrders(result.content || []);
+      setSelectedIds([]);
+      setServerTotal(result.totalElements || 0);
+      setServerPages(Math.max(1, result.totalPages || 1));
+      setServerStats({ activeOrders: result.activeOrders || 0, completedOrders: result.completedOrders || 0, orderValue: result.orderValue || 0 });
+    }).catch(() => { setOrders([]); setServerTotal(0); setServerPages(1); });
+  };
+  useEffect(() => { load(); }, [q, status, mode, dateFrom, dateTo, page, pageSize]);
+  useEffect(() => setPage(1), [q, status, mode, dateFrom, dateTo, pageSize]);
+  const stats = {
+    total: serverTotal,
+    active: serverStats.activeOrders,
+    completed: serverStats.completedOrders,
+    value: serverStats.orderValue,
+  };
+  async function updateStatus(order, next) {
+    if (!next || next === order.status) return;
+    setBusyId(order.id);
+    try {
+      await send(`/orders/${order.id}/status`, "PATCH", { status: next });
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+  async function updatePayment(order, next) {
+    setBusyId(order.id);
+    try { await send(`/orders/${order.id}/payment`, "PATCH", { paymentStatus: next, paymentMethod: order.paymentMethod, invoiceNumber: order.invoiceNumber }); load(); }
+    finally { setBusyId(null); }
+  }
+  async function updateDelivery(order, next) {
+    const trackingNotes = next === "DELIVERED" ? valueOrPrompt("Delivery notes", order.trackingNotes || "Delivered successfully") : order.trackingNotes;
+    if (trackingNotes === null) return;
+    setBusyId(order.id);
+    try { await send(`/orders/${order.id}/fulfillment`, "PATCH", { deliveryStatus: next, trackingNotes }); load(); }
+    finally { setBusyId(null); }
+  }
+  async function bulkUpdate(next) {
+    if (!selectedIds.length) return;
+    const reason = next === "CANCELLED" ? valueOrPrompt("Cancellation reason", "Cancelled by admin") : "";
+    if (reason === null) return;
+    await send("/orders/bulk-status", "PATCH", { ids: selectedIds, status: next, reason });
+    load();
+  }
+  function exportCsv() {
+    const header = ["Reference","Customer","Email","Organization","Status","Payment Method","Payment Status","Invoice","Delivery","Total","Created"];
+    const rows = orders.map((order)=>[order.reference,order.customerName,order.customerEmail,order.organization,order.status,order.paymentMethod,order.paymentStatus,order.invoiceNumber,order.deliveryStatus,order.total,order.createdAt]);
+    const csv = [header, ...rows].map((row)=>row.map((cell)=>`"${String(cell ?? "").replaceAll('"','""')}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const anchor = document.createElement("a");anchor.href=url;anchor.download="wefyx-orders.csv";document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  function valueOrPrompt(label, fallback) {
+    const value = window.prompt(label, fallback);
+    return value === null ? null : value;
+  }
+  return <div className="space-y-5 p-4 lg:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-emerald-50/70 to-white p-5">
+      <div><h2 className="text-xl font-black text-slate-900">Customer Order History</h2><p className="mt-1 text-xs text-slate-500">Review customer purchases, rentals, delivery address, and fulfillment status.</p></div>
+      <div className="flex gap-2"><button onClick={exportCsv} className="h-10 rounded-xl border bg-white px-4 text-xs font-bold text-brand">Export CSV</button><button onClick={load} className="h-10 rounded-xl bg-brand px-4 text-xs font-bold text-white">Refresh Orders</button></div>
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {[[ShoppingCart,"Total Orders",stats.total],[Clock3,"Active Orders",stats.active],[CheckCircle2,"Completed",stats.completed],[ReceiptText,"Order Value",amount(stats.value)]].map(([Icon,label,value])=><article key={label} className="card flex items-center gap-3 p-4"><div className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-brand"><Icon size={20}/></div><div><span className="text-[11px] text-slate-500">{label}</span><b className="mt-1 block text-xl">{value}</b></div></article>)}
+    </div>
+    <section className="card overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+        <div className="flex flex-wrap gap-1.5">{["ALL", ...statuses].map((item)=><button key={item} onClick={()=>setStatus(item)} className={`rounded-xl px-3 py-1.5 text-xs font-bold ${status===item?"bg-brand text-white":"bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:text-brand"}`}>{text(item)}</button>)}</div>
+        <label className="flex h-10 min-w-72 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3"><Search size={15} className="text-slate-400"/><input value={q} onChange={(e)=>setQ(e.target.value)} className="w-full bg-transparent text-xs outline-none" placeholder="Search reference, customer, email..."/></label>
+      </div>
+      <div className="grid gap-3 border-b bg-slate-50/60 p-4 text-xs md:grid-cols-5">
+        <label className="font-bold text-slate-600">Mode<select value={mode} onChange={(e)=>setMode(e.target.value)} className="mt-1 h-10 w-full rounded-xl border bg-white px-3 font-normal outline-none focus:border-brand"><option value="ALL">All modes</option><option value="BUY">Buy</option><option value="RENT">Rent</option></select></label>
+        <label className="font-bold text-slate-600">From<input type="date" value={dateFrom} onChange={(e)=>setDateFrom(e.target.value)} className="mt-1 h-10 w-full rounded-xl border bg-white px-3 font-normal outline-none focus:border-brand"/></label>
+        <label className="font-bold text-slate-600">To<input type="date" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} className="mt-1 h-10 w-full rounded-xl border bg-white px-3 font-normal outline-none focus:border-brand"/></label>
+        <label className="font-bold text-slate-600">Page size<select value={pageSize} onChange={(e)=>setPageSize(Number(e.target.value))} className="mt-1 h-10 w-full rounded-xl border bg-white px-3 font-normal outline-none focus:border-brand"><option value="5">5 / page</option><option value="10">10 / page</option><option value="20">20 / page</option><option value="50">50 / page</option></select></label>
+        <button type="button" onClick={()=>{setQ("");setStatus("ALL");setMode("ALL");setDateFrom("");setDateTo("");setPage(1);}} className="mt-5 h-10 rounded-xl border bg-white px-3 font-bold text-slate-600 hover:bg-emerald-50 hover:text-brand md:mt-6">Clear filters</button>
+      </div>
+      {selectedIds.length>0&&<div className="flex flex-wrap items-center gap-2 border-b bg-emerald-50 p-3 text-xs"><b>{selectedIds.length} selected</b><button onClick={()=>bulkUpdate("CONFIRMED")} className="rounded-lg bg-brand px-3 py-2 font-bold text-white">Mark confirmed</button><button onClick={()=>bulkUpdate("PROCESSING")} className="rounded-lg border bg-white px-3 py-2 font-bold text-slate-700">Mark processing</button><button onClick={()=>bulkUpdate("DISPATCHED")} className="rounded-lg border bg-white px-3 py-2 font-bold text-slate-700">Mark dispatched</button><button onClick={()=>bulkUpdate("CANCELLED")} className="rounded-lg border border-red-200 bg-white px-3 py-2 font-bold text-red-600">Cancel selected</button><button onClick={()=>setSelectedIds([])} className="ml-auto rounded-lg border bg-white px-3 py-2 font-bold text-slate-600">Clear</button></div>}
+      <div className="divide-y divide-slate-100">
+        {orders.map((order)=><article key={order.id} className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex gap-3"><input type="checkbox" checked={selectedIds.includes(order.id)} onChange={(e)=>setSelectedIds((ids)=>e.target.checked?[...ids,order.id]:ids.filter((id)=>id!==order.id))} className="mt-1 accent-emerald-600"/><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black">{order.reference}</h3><span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${badgeTone(order.status)}`}>{text(order.status)}</span><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">{text(order.paymentStatus || "PENDING")}</span><span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">{text(order.deliveryStatus || "PENDING")}</span></div><p className="mt-1 text-xs text-slate-500">{date(order.createdAt)} · {order.itemCount} item(s) · Invoice {order.invoiceNumber || "—"} · {text(order.paymentMethod || "PAY_ON_DELIVERY")}</p><p className="mt-2 text-xs text-slate-700"><b>{order.customerName || "Customer"}</b> · {order.customerEmail || "—"} · {order.organization || "—"}</p></div></div>
+            <div className="text-right"><b className="text-lg text-emerald-800">{amount(order.total)}</b><div className="mt-2 grid gap-1"><select disabled={busyId===order.id} value={order.status} onChange={(e)=>updateStatus(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{statuses.map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><select disabled={busyId===order.id} value={order.paymentStatus || "PENDING"} onChange={(e)=>updatePayment(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{["UNPAID","PENDING","PAID","PARTIALLY_PAID","REFUNDED","FAILED"].map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><select disabled={busyId===order.id} value={order.deliveryStatus || "PENDING"} onChange={(e)=>updateDelivery(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{["PENDING","PACKING","DISPATCHED","OUT_FOR_DELIVERY","DELIVERED","FAILED","CANCELLED"].map((item)=><option key={item} value={item}>{text(item)}</option>)}</select></div></div>
+          </div>
+          {order.deliveryAddress?.addressLine&&<div className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-900"><b>{order.deliveryAddress.label || "Delivery address"}</b><div>{order.deliveryAddress.contactName} · {order.deliveryAddress.phone}</div><div>{order.deliveryAddress.addressLine}, {order.deliveryAddress.emirate}, {order.deliveryAddress.country}</div></div>}
+          {(order.trackingNotes||order.cancellationReason||order.dispatchedAt||order.deliveredAt)&&<div className="mt-3 rounded-xl border border-slate-100 bg-white p-3 text-xs leading-5 text-slate-600"><b>Fulfillment</b>{order.dispatchedAt&&<div>Dispatched: {date(order.dispatchedAt)}</div>}{order.deliveredAt&&<div>Delivered: {date(order.deliveredAt)}</div>}{order.trackingNotes&&<div>Notes: {order.trackingNotes}</div>}{order.cancellationReason&&<div className="text-red-600">Cancellation: {order.cancellationReason}</div>}</div>}
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{order.items?.map((item)=><div key={`${order.id}-${item.productId}-${item.mode}`} className="rounded-xl bg-slate-50 p-3 text-xs"><b>{item.name}</b><p className="mt-1 text-slate-500">{item.mode === "RENT" ? `${item.quantity} x ${item.months} month(s)` : `Quantity ${item.quantity}`}</p><strong className="mt-2 block">{amount(item.lineTotal)}</strong></div>)}</div>
+        </article>)}
+        {!orders.length&&<div className="p-10 text-center text-sm text-slate-500">No orders match this filter.</div>}
+      </div>
+      {serverTotal>0&&<div className="flex flex-wrap items-center justify-between gap-3 border-t p-4 text-xs text-slate-500"><span>Showing {(page-1)*pageSize+1} to {Math.min(page*pageSize,serverTotal)} of {serverTotal} orders</span><div className="flex gap-1"><button disabled={page===1} onClick={()=>setPage((x)=>Math.max(1,x-1))} className="icon-btn h-8 w-8 disabled:opacity-40">‹</button>{Array.from({length:serverPages},(_,i)=>i+1).slice(Math.max(0,page-4),Math.max(7,page+3)).map((item)=><button key={item} onClick={()=>setPage(item)} className={`icon-btn h-8 w-8 ${page===item?"border-brand text-brand":""}`}>{item}</button>)}{serverPages>7&&page<serverPages-3&&<span className="grid h-8 place-items-center px-1">…</span>}<button disabled={page===serverPages} onClick={()=>setPage((x)=>Math.min(serverPages,x+1))} className="icon-btn h-8 w-8 disabled:opacity-40">›</button></div></div>}
+    </section>
+  </div>;
+}
+
 function Pagination({ text }) {
   const isDashboard = text.includes("18,542 users");
   const [dashboardTotal, setDashboardTotal] = useState(localUsers.length);
@@ -2381,6 +2505,8 @@ function AuthenticatedApp({ initialRegister = false }) {
       <MessagesPage />
     ) : page === "Requirements & Quotes" ? (
       <RequirementsPage />
+    ) : page === "Orders" ? (
+      <AdminOrdersPage />
     ) : page === "Products & Services" ? (
       <ProductManagementPage />
     ) : page === "My Profile" ? (
@@ -2389,7 +2515,7 @@ function AuthenticatedApp({ initialRegister = false }) {
       <DynamicModulePage name={page} />
     );
   return (
-    <div className="flex min-h-screen">
+    <div className="wf-workspace wf-admin-shell flex min-h-screen">
       <AppSidebar
         page={page}
         setPage={setPage}

@@ -16,6 +16,9 @@ public class CustomerOrder {
     @Column(nullable = false) private String customerName;
     private String organization;
     @Column(nullable = false) private String status;
+    @Column(length = 40) private String paymentMethod;
+    @Column(length = 40) private String paymentStatus;
+    @Column(length = 80) private String invoiceNumber;
     @Column(nullable = false) private String currency;
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal subtotal;
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal vat;
@@ -30,6 +33,11 @@ public class CustomerOrder {
     @Column(length = 80) private String deliveryCountry;
     private Double deliveryLatitude;
     private Double deliveryLongitude;
+    @Column(length = 40) private String deliveryStatus;
+    @Column(length = 2000) private String trackingNotes;
+    @Column(length = 1000) private String cancellationReason;
+    private LocalDateTime dispatchedAt;
+    private LocalDateTime deliveredAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -42,6 +50,9 @@ public class CustomerOrder {
     public String getCustomerName(){return customerName;} public void setCustomerName(String v){customerName=v;}
     public String getOrganization(){return organization;} public void setOrganization(String v){organization=v;}
     public String getStatus(){return status;} public void setStatus(String v){status=v;}
+    public String getPaymentMethod(){return paymentMethod;} public void setPaymentMethod(String v){paymentMethod=v;}
+    public String getPaymentStatus(){return paymentStatus;} public void setPaymentStatus(String v){paymentStatus=v;}
+    public String getInvoiceNumber(){return invoiceNumber;} public void setInvoiceNumber(String v){invoiceNumber=v;}
     public String getCurrency(){return currency;} public void setCurrency(String v){currency=v;}
     public BigDecimal getSubtotal(){return subtotal;} public void setSubtotal(BigDecimal v){subtotal=v;}
     public BigDecimal getVat(){return vat;} public void setVat(BigDecimal v){vat=v;}
@@ -56,5 +67,10 @@ public class CustomerOrder {
     public String getDeliveryCountry(){return deliveryCountry;} public void setDeliveryCountry(String v){deliveryCountry=v;}
     public Double getDeliveryLatitude(){return deliveryLatitude;} public void setDeliveryLatitude(Double v){deliveryLatitude=v;}
     public Double getDeliveryLongitude(){return deliveryLongitude;} public void setDeliveryLongitude(Double v){deliveryLongitude=v;}
+    public String getDeliveryStatus(){return deliveryStatus;} public void setDeliveryStatus(String v){deliveryStatus=v;}
+    public String getTrackingNotes(){return trackingNotes;} public void setTrackingNotes(String v){trackingNotes=v;}
+    public String getCancellationReason(){return cancellationReason;} public void setCancellationReason(String v){cancellationReason=v;}
+    public LocalDateTime getDispatchedAt(){return dispatchedAt;} public void setDispatchedAt(LocalDateTime v){dispatchedAt=v;}
+    public LocalDateTime getDeliveredAt(){return deliveredAt;} public void setDeliveredAt(LocalDateTime v){deliveredAt=v;}
     public LocalDateTime getCreatedAt(){return createdAt;} public LocalDateTime getUpdatedAt(){return updatedAt;}
 }
