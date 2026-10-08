@@ -563,7 +563,10 @@
 .cart-site .rp-cart-side .rp-summary>div.grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:8px!important;margin-top:12px!important}
 .cart-site .rp-cart-side .rp-summary>div.mt-4{display:block!important;margin-top:16px!important;padding:14px!important;border:1px solid #e2f2eb;border-radius:8px;background:#f8fcfa}
 .cart-site .rp-cart-side .rp-summary>div.mt-4>b{display:block;margin-bottom:10px;font-size:12px;line-height:1.25;color:#123d2b}
-.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:10px!important;margin-top:0!important}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;margin-top:0!important}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid textarea{grid-column:1/-1}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid>.grid-cols-2{grid-column:1/-1}
+.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid>label{grid-column:1/-1}
 .cart-site .rp-cart-side .rp-summary>div.mt-4 input,.cart-site .rp-cart-side .rp-summary>div.mt-4 textarea{width:100%;min-width:0;border-color:#d9ece4;background:#fff;color:#123d2b}
 .cart-site .rp-cart-side .rp-summary>div.mt-4 textarea{min-height:76px;resize:vertical;line-height:1.45}
 .cart-site .rp-cart-side .rp-summary>div.mt-4 .grid-cols-2{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
@@ -573,9 +576,13 @@
 .cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.flex button{min-width:0;min-height:38px;white-space:normal;line-height:1.2}
 .cart-site .rp-cart-side .rp-summary>div.mt-4>p{display:block!important;margin-top:10px!important;line-height:1.5}
 .cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]){align-items:flex-start}
+.cart-site .rp-cart-side .rp-summary:has(input[name="paymentMethod"])>div.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]){min-width:0;padding:10px!important;gap:8px!important}
+.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) input{margin-top:3px!important;flex:none}
 .cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) b{gap:7px!important;line-height:1.15}
 .cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) b svg{display:none}
 .cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) b:before{content:"";display:inline-grid;place-items:center;flex:none;min-width:42px;height:22px;border-radius:5px;border:1px solid #d8e8e1;background:#fff;color:#123d2b;font-size:8px;font-weight:900;letter-spacing:.02em;line-height:1}
+.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) small{display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35!important}
 .cart-site .rp-cart-side .rp-summary label:has(input[value="CARD"]) b:before{content:"VISA  MC";color:#123d7a}
 .cart-site .rp-cart-side .rp-summary label:has(input[value="APPLE_PAY"]) b:before{content:" Pay";background:#111;color:#fff;border-color:#111;font-size:9px}
 .cart-site .rp-cart-side .rp-summary label:has(input[value="GOOGLE_PAY"]) b:before{content:"G Pay";color:#1a73e8}
@@ -588,6 +595,9 @@
 .cart-site .rp-cart-side .rp-summary label:has(input[value="CARD_ON_DELIVERY"]) b:before{content:"POS";color:#007849}
 .cart-site .rp-cart-side .rp-summary label:has(input[value="PAYMENT_LINK"]) b:before{content:"LINK";color:#007849}
 .cart-site .rp-cart-side .rp-summary label:has(input[value="PAY_ON_DELIVERY"]) b:before{content:"COD";color:#007849}
+@media(min-width:900px){.cart-site .rp-cart-layout{grid-template-columns:minmax(0,1fr) 420px}.cart-site .rp-cart-side{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:899px) and (min-width:560px){.cart-site .rp-cart-side{grid-template-columns:repeat(2,minmax(0,1fr))}.cart-site .rp-cart-side .rp-summary:has(input[name="paymentMethod"]){grid-column:1/-1}.cart-site .rp-cart-assurance{grid-column:1/-1}}
+@media(max-width:559px){.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid{grid-template-columns:minmax(0,1fr)!important}.cart-site .rp-cart-side .rp-summary:has(input[name="paymentMethod"])>div.grid{grid-template-columns:minmax(0,1fr)!important}}
 .cart-site .rp-cart-assurance{position:static!important;height:auto!important;padding:12px 16px}
 .cart-site .rp-cart-assurance>div{display:flex;align-items:center;gap:12px;margin:8px 0}
 .cart-site .rp-cart-assurance svg{color:#008553;width:26px;height:26px;flex:none}
