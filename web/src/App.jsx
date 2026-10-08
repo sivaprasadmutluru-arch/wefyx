@@ -79,6 +79,7 @@ import DynamicPermissionMatrixPage from "./DynamicPermissionMatrixPage";
 import DynamicAuditLogsPage from "./DynamicAuditLogsPage";
 import DynamicPermissionsPage from "./DynamicPermissionsPage";
 import PrivacyPolicyPage from "./PrivacyPolicyPage";
+import TrustPolicyPage from "./TrustPolicyPage";
 import EmployeePortal from "./EmployeePortal";
 import EmployeeApprovals from './EmployeeApprovals';
 import VendorPortal from "./VendorPortal";
@@ -653,7 +654,7 @@ function AdminOrdersPage() {
   const [pageSize, setPageSize] = useState(10);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
-  const [serverStats, setServerStats] = useState({ activeOrders: 0, completedOrders: 0, orderValue: 0 });
+  const [serverStats, setServerStats] = useState({ activeOrders: 0, completedOrders: 0, orderValue: 0, unpaidOrders: 0, pendingPaymentLinks: 0, lowStockProducts: 0, delayedOrders: 0 });
   const [selectedIds, setSelectedIds] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const statuses = ["PLACED", "CONFIRMED", "PROCESSING", "DISPATCHED", "COMPLETED", "CANCELLED"];
@@ -675,7 +676,7 @@ function AdminOrdersPage() {
       setSelectedIds([]);
       setServerTotal(result.totalElements || 0);
       setServerPages(Math.max(1, result.totalPages || 1));
-      setServerStats({ activeOrders: result.activeOrders || 0, completedOrders: result.completedOrders || 0, orderValue: result.orderValue || 0 });
+      setServerStats({ activeOrders: result.activeOrders || 0, completedOrders: result.completedOrders || 0, orderValue: result.orderValue || 0, unpaidOrders: result.unpaidOrders || 0, pendingPaymentLinks: result.pendingPaymentLinks || 0, lowStockProducts: result.lowStockProducts || 0, delayedOrders: result.delayedOrders || 0 });
     }).catch(() => { setOrders([]); setServerTotal(0); setServerPages(1); });
   };
   useEffect(() => { load(); }, [q, status, mode, dateFrom, dateTo, page, pageSize]);
@@ -698,7 +699,18 @@ function AdminOrdersPage() {
   }
   async function updatePayment(order, next) {
     setBusyId(order.id);
-    try { await send(`/orders/${order.id}/payment`, "PATCH", { paymentStatus: next, paymentMethod: order.paymentMethod, invoiceNumber: order.invoiceNumber }); load(); }
+    try { await send(`/orders/${order.id}/payment`, "PATCH", { paymentStatus: next, paymentMethod: order.paymentMethod, invoiceNumber: order.invoiceNumber, paymentReference: order.paymentReference, paymentProofUrl: order.paymentProofUrl, paymentNotes: order.paymentNotes }); load(); }
+    finally { setBusyId(null); }
+  }
+  async function editPayment(order) {
+    const paymentReference = valueOrPrompt("Transaction/reference number", order.paymentReference || "");
+    if (paymentReference === null) return;
+    const paymentProofUrl = valueOrPrompt("Payment proof URL", order.paymentProofUrl || "");
+    if (paymentProofUrl === null) return;
+    const paymentNotes = valueOrPrompt("Payment notes", order.paymentNotes || "");
+    if (paymentNotes === null) return;
+    setBusyId(order.id);
+    try { await send(`/orders/${order.id}/payment`, "PATCH", { paymentStatus: order.paymentStatus || "PENDING", paymentMethod: order.paymentMethod, invoiceNumber: order.invoiceNumber, paymentReference, paymentProofUrl, paymentNotes }); load(); }
     finally { setBusyId(null); }
   }
   async function updateDelivery(order, next) {
@@ -716,8 +728,8 @@ function AdminOrdersPage() {
     load();
   }
   function exportCsv() {
-    const header = ["Reference","Customer","Email","Organization","Status","Payment Method","Payment Status","Invoice","Delivery","Total","Created"];
-    const rows = orders.map((order)=>[order.reference,order.customerName,order.customerEmail,order.organization,order.status,order.paymentMethod,order.paymentStatus,order.invoiceNumber,order.deliveryStatus,order.total,order.createdAt]);
+    const header = ["Reference","Customer","Email","Organization","Status","Payment Method","Payment Status","Payment Ref","Invoice","Delivery","Subtotal","VAT","Deposit","Amount Due","Created"];
+    const rows = orders.map((order)=>[order.reference,order.customerName,order.customerEmail,order.organization,order.status,order.paymentMethod,order.paymentStatus,order.paymentReference,order.invoiceNumber,order.deliveryStatus,order.subtotal,order.vat,order.securityDeposit,order.amountDue,order.createdAt]);
     const csv = [header, ...rows].map((row)=>row.map((cell)=>`"${String(cell ?? "").replaceAll('"','""')}"`).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const anchor = document.createElement("a");anchor.href=url;anchor.download="wefyx-orders.csv";document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -733,6 +745,9 @@ function AdminOrdersPage() {
     </div>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {[[ShoppingCart,"Total Orders",stats.total],[Clock3,"Active Orders",stats.active],[CheckCircle2,"Completed",stats.completed],[ReceiptText,"Order Value",amount(stats.value)]].map(([Icon,label,value])=><article key={label} className="card flex items-center gap-3 p-4"><div className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-brand"><Icon size={20}/></div><div><span className="text-[11px] text-slate-500">{label}</span><b className="mt-1 block text-xl">{value}</b></div></article>)}
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {[[CreditCard,"Unpaid orders",serverStats.unpaidOrders],[WalletCards,"Payment links pending",serverStats.pendingPaymentLinks],[Package,"Low-stock products",serverStats.lowStockProducts],[Bell,"Delayed orders",serverStats.delayedOrders]].map(([Icon,label,value])=><article key={label} className="card flex items-center gap-3 border-amber-100 bg-amber-50/40 p-4"><div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-amber-700"><Icon size={18}/></div><div><span className="text-[11px] text-slate-500">{label}</span><b className="mt-1 block text-lg">{value}</b></div></article>)}
     </div>
     <section className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
@@ -750,8 +765,8 @@ function AdminOrdersPage() {
       <div className="divide-y divide-slate-100">
         {orders.map((order)=><article key={order.id} className="p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex gap-3"><input type="checkbox" checked={selectedIds.includes(order.id)} onChange={(e)=>setSelectedIds((ids)=>e.target.checked?[...ids,order.id]:ids.filter((id)=>id!==order.id))} className="mt-1 accent-emerald-600"/><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black">{order.reference}</h3><span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${badgeTone(order.status)}`}>{text(order.status)}</span><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">{text(order.paymentStatus || "PENDING")}</span><span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">{text(order.deliveryStatus || "PENDING")}</span></div><p className="mt-1 text-xs text-slate-500">{date(order.createdAt)} · {order.itemCount} item(s) · Invoice {order.invoiceNumber || "—"} · {text(order.paymentMethod || "PAY_ON_DELIVERY")}</p><p className="mt-2 text-xs text-slate-700"><b>{order.customerName || "Customer"}</b> · {order.customerEmail || "—"} · {order.organization || "—"}</p></div></div>
-            <div className="text-right"><b className="text-lg text-emerald-800">{amount(order.total)}</b><div className="mt-2 grid gap-1"><select disabled={busyId===order.id} value={order.status} onChange={(e)=>updateStatus(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{statuses.map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><select disabled={busyId===order.id} value={order.paymentStatus || "PENDING"} onChange={(e)=>updatePayment(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{["UNPAID","PENDING","PAID","PARTIALLY_PAID","REFUNDED","FAILED"].map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><select disabled={busyId===order.id} value={order.deliveryStatus || "PENDING"} onChange={(e)=>updateDelivery(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{["PENDING","PACKING","DISPATCHED","OUT_FOR_DELIVERY","DELIVERED","FAILED","CANCELLED"].map((item)=><option key={item} value={item}>{text(item)}</option>)}</select></div></div>
+            <div className="flex gap-3"><input type="checkbox" checked={selectedIds.includes(order.id)} onChange={(e)=>setSelectedIds((ids)=>e.target.checked?[...ids,order.id]:ids.filter((id)=>id!==order.id))} className="mt-1 accent-emerald-600"/><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black">{order.reference}</h3><span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${badgeTone(order.status)}`}>{text(order.status)}</span><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">{text(order.paymentStatus || "PENDING")}</span><span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">{text(order.deliveryStatus || "PENDING")}</span></div><p className="mt-1 text-xs text-slate-500">{date(order.createdAt)} · {order.itemCount} item(s) · Invoice {order.invoiceNumber || "—"} · {text(order.paymentMethod || "PAY_ON_DELIVERY")}</p><p className="mt-2 text-xs text-slate-700"><b>{order.customerName || "Customer"}</b> · {order.customerEmail || "—"} · {order.organization || "—"}</p>{(order.paymentReference||order.paymentProofUrl||order.paymentNotes)&&<p className="mt-2 text-xs text-slate-500">Payment ref: {order.paymentReference || "—"} {order.paymentProofUrl&&<a className="ml-2 font-bold text-brand" href={order.paymentProofUrl} target="_blank" rel="noreferrer">Proof</a>} {order.paymentNotes&&` · ${order.paymentNotes}`}</p>}</div></div>
+            <div className="text-right"><b className="text-lg text-emerald-800">{amount(order.amountDue||order.total)}</b><small className="block text-[10px] text-slate-500">Deposit {amount(order.securityDeposit)}</small><div className="mt-2 grid gap-1"><select disabled={busyId===order.id} value={order.status} onChange={(e)=>updateStatus(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{statuses.map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><select disabled={busyId===order.id} value={order.paymentStatus || "PENDING"} onChange={(e)=>updatePayment(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{["UNPAID","PENDING","PAID","PARTIALLY_PAID","REFUNDED","FAILED"].map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><select disabled={busyId===order.id} value={order.deliveryStatus || "PENDING"} onChange={(e)=>updateDelivery(order,e.target.value)} className="h-9 rounded-lg border px-2 text-xs font-semibold outline-none focus:border-brand">{["PENDING","PACKING","DISPATCHED","OUT_FOR_DELIVERY","DELIVERED","FAILED","CANCELLED"].map((item)=><option key={item} value={item}>{text(item)}</option>)}</select><button disabled={busyId===order.id} onClick={()=>editPayment(order)} className="h-9 rounded-lg border bg-white px-2 text-xs font-bold text-brand">Payment details</button></div></div>
           </div>
           {order.deliveryAddress?.addressLine&&<div className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-900"><b>{order.deliveryAddress.label || "Delivery address"}</b><div>{order.deliveryAddress.contactName} · {order.deliveryAddress.phone}</div><div>{order.deliveryAddress.addressLine}, {order.deliveryAddress.emirate}, {order.deliveryAddress.country}</div></div>}
           {(order.trackingNotes||order.cancellationReason||order.dispatchedAt||order.deliveredAt)&&<div className="mt-3 rounded-xl border border-slate-100 bg-white p-3 text-xs leading-5 text-slate-600"><b>Fulfillment</b>{order.dispatchedAt&&<div>Dispatched: {date(order.dispatchedAt)}</div>}{order.deliveredAt&&<div>Delivered: {date(order.deliveredAt)}</div>}{order.trackingNotes&&<div>Notes: {order.trackingNotes}</div>}{order.cancellationReason&&<div className="text-red-600">Cancellation: {order.cancellationReason}</div>}</div>}
@@ -2558,6 +2573,9 @@ export default function App() {
   if (path === "/service-tasks" || path.startsWith("/service-tasks/")) return <ServiceTickets employee />;
   if (path.startsWith("/support-updates/")) return <ServiceTickets notification />;
   if (path === "/privacy-policy") return <PrivacyPolicyPage />;
+  if (path === "/terms") return <TrustPolicyPage type="terms" />;
+  if (path === "/rental-terms") return <TrustPolicyPage type="rental" />;
+  if (path === "/refund-policy") return <TrustPolicyPage type="refund" />;
   if (path === "/portal") return <AuthenticatedApp />;
   if (path === "/account" || path.startsWith("/account/")) return <CustomerAccount />;
   if (path === "/register" || path === "/signup" || path === "/join") return <PublicRegistration initialView="signup" />;
