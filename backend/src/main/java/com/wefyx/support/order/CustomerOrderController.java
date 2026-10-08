@@ -144,6 +144,13 @@ public class CustomerOrderController {
             saved.setPaymentNotes("Stripe card payment created. Awaiting customer confirmation.");
             saved=orders.save(saved);
             audit(saved,auth,"STRIPE_PAYMENT_INTENT_CREATED","paymentReference",null,intent.paymentIntentId(),"Stripe Elements card checkout");
+        }else if(stripeHostedPayment(paymentMethod)){
+            var session=stripeCheckout(saved);
+            checkoutUrl=session.url();
+            saved.setPaymentReference(session.sessionId());
+            saved.setPaymentNotes("Stripe Checkout session created. Awaiting customer payment.");
+            saved=orders.save(saved);
+            audit(saved,auth,"STRIPE_CHECKOUT_SESSION_CREATED","paymentReference",null,session.sessionId(),"Stripe hosted checkout");
         }
         notifications.send(account.getEmail(),null,"ORDER_PLACED","Order received",saved.getReference()+" has been received. Payment method: "+paymentMethod.replace('_',' ').toLowerCase(Locale.ROOT)+".");
         return view(saved,checkoutUrl,paymentClientSecret,stripePublishableKey);
@@ -307,7 +314,7 @@ public class CustomerOrderController {
             BigDecimal amount=order.getTotal().add(order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit());
             Map<String,String> form=new LinkedHashMap<>();
             form.put("mode","payment");
-            form.put("payment_method_types[0]","card");
+            form.put("automatic_payment_methods[enabled]","true");
             form.put("customer_email",order.getCustomerEmail());
             form.put("client_reference_id",order.getReference());
             form.put("metadata[orderId]",String.valueOf(order.getId()));
@@ -400,6 +407,7 @@ public class CustomerOrderController {
     private static String required(String value,String label){if(blank(value))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,label+" is required");return value.trim();}
     private static String cleanText(String value,int max){if(blank(value))return null;String clean=value.trim();return clean.length()>max?clean.substring(0,max):clean;}
     private static String paymentMethod(String value){String clean=blank(value)?"PAY_ON_DELIVERY":value.trim().toUpperCase(Locale.ROOT);if(!Set.of("CARD","APPLE_PAY","GOOGLE_PAY","SAMSUNG_PAY","PAY_ON_DELIVERY","CASH_ON_DELIVERY","CARD_ON_DELIVERY","BANK_TRANSFER","TABBY","TAMARA","PAYPAL","PAYMENT_LINK").contains(clean))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid payment method");return clean;}
+    private static boolean stripeHostedPayment(String value){return Set.of("APPLE_PAY","GOOGLE_PAY","SAMSUNG_PAY","TABBY","TAMARA","PAYPAL","PAYMENT_LINK").contains(value);}
 
     public record Create(List<Item> items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,String paymentMethod,boolean termsAccepted,String termsVersion) {}
     public record StripeCheckout(String sessionId,String url) {}
