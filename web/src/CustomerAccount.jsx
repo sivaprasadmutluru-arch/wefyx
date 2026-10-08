@@ -28,7 +28,16 @@ const badge = (status = "") => {
 };
 const paymentCopy = (order) => {
   const invoice = order.invoiceNumber || order.reference;
+  if (order.paymentMethod === "CARD") return "Card payment will be completed through a secure payment link after order confirmation.";
+  if (order.paymentMethod === "APPLE_PAY") return "Apple Pay will be available through the secure payment link after confirmation.";
+  if (order.paymentMethod === "GOOGLE_PAY") return "Google Pay will be available through the secure payment link after confirmation.";
+  if (order.paymentMethod === "SAMSUNG_PAY") return "Samsung Pay will be available where supported through the card payment link.";
   if (order.paymentMethod === "BANK_TRANSFER") return `Bank transfer is pending. Use ${invoice} as the transfer reference after confirmation.`;
+  if (order.paymentMethod === "CASH_ON_DELIVERY") return "Cash payment is due during delivery or installation after confirmation.";
+  if (order.paymentMethod === "CARD_ON_DELIVERY") return "A card machine can be arranged for payment during delivery or installation where available.";
+  if (order.paymentMethod === "TABBY") return "Tabby split payment eligibility will be confirmed before payment is requested.";
+  if (order.paymentMethod === "TAMARA") return "Tamara pay later or split payment eligibility will be confirmed before payment is requested.";
+  if (order.paymentMethod === "PAYPAL") return "A PayPal invoice or secure payment request will be sent after confirmation.";
   if (order.paymentMethod === "PAYMENT_LINK") return "A secure payment link will be sent after our team confirms the order.";
   return "Payment is due during delivery or installation after order confirmation.";
 };

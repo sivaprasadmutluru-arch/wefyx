@@ -38,8 +38,17 @@ const rentalIds = {
 };
 const rentalPrice = (text) => Number(String(text).match(/[\d,]+/)?.[0].replaceAll(",", "") || 0);
 const paymentOptions = [
+  ["CARD", "Credit / debit card", "Visa, Mastercard, and UAE bank cards can be handled by secure payment link."],
+  ["APPLE_PAY", "Apple Pay", "Fast mobile wallet payment after confirmation through the payment link."],
+  ["GOOGLE_PAY", "Google Pay", "Pay with a saved card after the secure payment link is issued."],
+  ["SAMSUNG_PAY", "Samsung Pay", "Mobile wallet payment supported through compatible card checkout links."],
   ["PAY_ON_DELIVERY", "Pay on delivery", "Pay after confirmation when equipment is delivered or installed."],
+  ["CASH_ON_DELIVERY", "Cash on delivery", "Cash payment can be collected during delivery or installation."],
+  ["CARD_ON_DELIVERY", "Card on delivery", "Pay by card machine at delivery or installation where available."],
   ["BANK_TRANSFER", "Bank transfer", "Use the invoice number as transfer reference after order confirmation."],
+  ["TABBY", "Tabby", "Choose split payments where eligible after order review."],
+  ["TAMARA", "Tamara", "Pay later or split payment where eligible after order review."],
+  ["PAYPAL", "PayPal", "Pay online by PayPal invoice or secure payment request when available."],
   ["PAYMENT_LINK", "Payment link", "A secure payment link will be sent after our team reviews the order."],
 ];
 
