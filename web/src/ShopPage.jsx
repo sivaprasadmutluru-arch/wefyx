@@ -30,7 +30,7 @@ import {
 import UnifiedHeader from "./UnifiedHeader";
 import { PublicFooter } from "./RentalPages";
 import AIQuotationModal from "./AIQuotationModal";
-import { addToCart } from "./cart";
+import { addToCart, cartCount, loadCart } from "./cart";
 import { get } from "./api";
 
 const shopIds = {
@@ -48,6 +48,7 @@ export default function ShopPage() {
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [liveProducts, setLiveProducts] = useState(null);
+  const [cartItems, setCartItems] = useState(loadCart);
 
   const products = [
     {
@@ -173,6 +174,12 @@ export default function ShopPage() {
   ];
   useEffect(() => { const categories={Laptops:"Laptop",Desktops:"Desktop",Monitors:"Monitor",Printers:"Printer",Projectors:"AV",Power:"UPS"};get("/catalog/products").then(rows => setLiveProducts(rows.filter(x => x.purchasable).map(x => ({ code:x.code,name:x.name,category:categories[x.category]||x.category,brand:x.brand,specs:x.specification,price:Number(x.buyPrice),image:x.imageUrl,warranty:"Wefyx business warranty",stock:x.stockQuantity>0?`${x.stockQuantity} available`:"Out of stock",stockQuantity:x.stockQuantity })))).catch(() => {}); }, []);
   const catalogProducts = liveProducts || products;
+  const cartQuantity = cartCount(cartItems);
+  const cartKeyFor = (product) => `${product.code || shopIds[product.name]}:BUY`;
+  const cartQuantityFor = (product) => {
+    const key = cartKeyFor(product);
+    return cartItems.filter((item) => `${item.id}:${item.mode || "RENT"}` === key).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+  };
 
   const categories = [
     { name: "All", label: "All Products" },
@@ -203,14 +210,15 @@ export default function ShopPage() {
 
   const addProduct = (product) => {
     const code = product.code || shopIds[product.name];
-    addToCart({ id: code, productId: code, name: product.name, spec: product.specs, image: product.image, price: product.price, mode: "BUY", lockedMode: true, quantity: 1, months: 1 });
+    const nextCart = addToCart({ id: code, productId: code, name: product.name, spec: product.specs, image: product.image, price: product.price, mode: "BUY", lockedMode: true, quantity: 1, months: 1 });
+    setCartItems(nextCart);
     setSelectedProduct(product.name);
     setTimeout(() => setSelectedProduct(null), 2500);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      <UnifiedHeader onOpenQuote={() => setShowQuoteModal(true)} />
+      <UnifiedHeader cartCount={cartQuantity} onOpenQuote={() => setShowQuoteModal(true)} />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-[#09482e] via-[#0c5d3b] to-[#09482e] py-12 text-white sm:py-16">
@@ -273,6 +281,7 @@ export default function ShopPage() {
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-500 w-full sm:w-auto justify-between sm:justify-end">
             <span>Showing <strong>{filtered.length}</strong> products</span>
+            {cartQuantity > 0 && <a href="/cart" className="rounded-full bg-emerald-50 px-3 py-1 font-bold text-emerald-700">{cartQuantity} in cart</a>}
             <button
               onClick={() => {
                 setFilter("All");
@@ -287,10 +296,12 @@ export default function ShopPage() {
 
         {/* Products Grid */}
         <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((prod) => (
+          {filtered.map((prod) => {
+            const addedQuantity = cartQuantityFor(prod);
+            return (
             <div
               key={prod.name}
-              className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-emerald-400 hover:shadow-xl"
+              className={`group flex flex-col rounded-2xl border bg-white p-5 shadow-sm transition hover:border-emerald-400 hover:shadow-xl ${addedQuantity ? "border-emerald-500 ring-1 ring-emerald-100" : "border-slate-200"}`}
             >
               <div className="relative flex h-48 w-full items-center justify-center rounded-xl bg-slate-50 p-4">
                 <img
@@ -335,10 +346,10 @@ export default function ShopPage() {
                       type="button"
                       disabled={prod.stockQuantity === 0}
                       onClick={() => addProduct(prod)}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold shadow transition disabled:cursor-not-allowed disabled:bg-slate-300 ${addedQuantity ? "bg-emerald-700 text-white hover:bg-emerald-800" : "bg-slate-900 text-white hover:bg-slate-800"}`}
                     >
-                      <ShoppingCart size={14} />
-                      <span>{prod.stockQuantity === 0 ? "Out of stock" : selectedProduct === prod.name ? "Added to cart" : "Add to cart"}</span>
+                      {addedQuantity ? <Check size={14} /> : <ShoppingCart size={14} />}
+                      <span>{prod.stockQuantity === 0 ? "Out of stock" : addedQuantity ? `Added (${addedQuantity})` : selectedProduct === prod.name ? "Added" : "Add to cart"}</span>
                     </button>
                     <a
                       href="/rent"
@@ -351,7 +362,7 @@ export default function ShopPage() {
                 </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       </main>
 

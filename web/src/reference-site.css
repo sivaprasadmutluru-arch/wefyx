@@ -670,6 +670,30 @@
 .detail-site .rp-description h2{font-size:14px;margin:14px 0 7px}
 .detail-site .rp-description p{font-size:11px;line-height:1.5;margin:8px 0}
 .detail-site .rp-description aside{position:static!important;height:auto!important;min-height:44px;margin-top:10px;display:flex;align-items:center}
+.cart-site .rp-checkout-teaser{border:1px solid #dbf0e7;border-radius:8px;background:#fff;padding:16px;align-self:start;box-shadow:0 14px 34px rgba(13,66,44,.06)}
+.cart-site .rp-checkout-teaser h2{font-size:18px;margin:0 0 12px;padding-bottom:12px;border-bottom:1px solid #e5f2ed;color:#123d2b}
+.cart-site .rp-checkout-teaser p{display:flex;justify-content:space-between;gap:16px;margin:8px 0;font-size:12px;color:#315445}
+.cart-site .rp-checkout-teaser strong{display:flex;justify-content:space-between;align-items:center;margin:14px 0;padding:13px 0 0;border-top:1px solid #e5f2ed;font-size:13px;color:#123d2b}
+.cart-site .rp-checkout-teaser strong b{font-size:20px;color:#008553}
+.cart-site .rp-checkout-teaser .rp-primary{height:44px;margin-top:8px;cursor:pointer}
+.cart-site .rp-checkout-error{display:block!important;margin:10px 0!important;border-radius:7px;background:#fff1f2;padding:9px!important;color:#b91c1c!important}
+.cart-site .rp-cart-side{display:none!important}
+.cart-site .rp-cart-side.is-open{position:fixed!important;inset:0!important;z-index:1000!important;display:grid!important;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr)!important;grid-template-areas:"head head" "address payment" "address summary" "assurance assurance"!important;align-items:start!important;gap:12px!important;width:auto!important;height:auto!important;max-height:none!important;margin:0!important;padding:28px!important;background:rgba(6,32,21,.48)!important;overflow:auto!important;backdrop-filter:blur(4px)}
+.cart-site .rp-cart-side.is-open .rp-checkout-modal-head{grid-area:head;display:flex;align-items:center;justify-content:space-between;width:min(1050px,100%);margin:0 auto -2px;padding:14px 16px;border:1px solid #d9efe6;border-radius:8px;background:#fff;box-shadow:0 18px 44px rgba(4,31,20,.16)}
+.cart-site .rp-checkout-modal-head small{display:block;font-size:10px;font-weight:800;text-transform:uppercase;color:#008553;letter-spacing:.08em}
+.cart-site .rp-checkout-modal-head h2{margin:2px 0 0;font-size:20px;color:#123d2b}
+.cart-site .rp-checkout-modal-head button{display:grid;place-items:center;width:34px;height:34px;border:1px solid #dcefe7;border-radius:7px;background:#fff;color:#123d2b;cursor:pointer}
+.cart-site .rp-cart-side.is-open .rp-summary,.cart-site .rp-cart-side.is-open .rp-cart-assurance{width:100%;max-width:none;margin:0;box-shadow:0 18px 44px rgba(4,31,20,.16)}
+.cart-site .rp-cart-side.is-open .rp-summary:nth-of-type(1){grid-area:address}
+.cart-site .rp-cart-side.is-open .rp-summary:nth-of-type(2){grid-area:payment}
+.cart-site .rp-cart-side.is-open .rp-summary:nth-of-type(3){grid-area:summary}
+.cart-site .rp-cart-side.is-open .rp-cart-assurance{grid-area:assurance;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));width:min(1050px,100%);margin:0 auto;background:#fff}
+.cart-site .rp-cart-side.is-open>.rp-summary{max-width:calc(525px - 6px)}
+.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(1),.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(2),.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(3){justify-self:stretch}
+.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(1){justify-self:end}
+.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(2),.cart-site .rp-cart-side.is-open>.rp-summary:nth-of-type(3){justify-self:start}
+@media(max-width:900px){.cart-site .rp-cart-side.is-open{grid-template-columns:1fr!important;grid-template-areas:"head" "address" "payment" "summary" "assurance"!important;padding:14px!important}.cart-site .rp-cart-side.is-open>.rp-summary{max-width:none}.cart-site .rp-cart-side.is-open .rp-cart-assurance{grid-template-columns:1fr 1fr}.cart-site .rp-checkout-modal-head h2{font-size:17px}}
+@media(max-width:620px){.cart-site .rp-checkout-teaser{padding:14px}.cart-site .rp-cart-side.is-open{padding:10px!important}.cart-site .rp-cart-side.is-open .rp-cart-assurance{grid-template-columns:1fr}.cart-site .rp-checkout-modal-head{border-radius:7px}}
 .detail-site .rp-description-panel{min-height:185px}
 .detail-site .rp-install{position:static!important;height:auto!important;align-self:start;padding:15px;background:#f4fefa;border:1px solid #dcf4ea;border-radius:5px}
 .detail-site .rp-install h2{font-size:14px;margin:0 0 7px}
