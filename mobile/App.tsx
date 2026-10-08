@@ -67,8 +67,10 @@ import {
   ApiError,
   apiGet,
   apiLogin,
+  apiRequestLoginOtp,
   apiSend,
   apiUpload,
+  apiVerifyPhoneLogin,
   clearSessionToken,
   getSessionToken,
   saveSessionToken,
@@ -326,11 +328,30 @@ function Login({ onLogin }: { onLogin: () => void }) {
     [showPassword, setShowPassword] = useState(false),
     [forgot, setForgot] = useState(false),
     [registering,setRegistering]=useState(false),
+    [otpPending,setOtpPending]=useState(false),
+    [loginPhone,setLoginPhone]=useState(''),
+    [loginOtp,setLoginOtp]=useState(''),
     [message, setMessage] = useState('');
+  const normalizePhone=(value:string)=>{const clean=value.trim().replace(/[\s()-]/g,'');return clean.startsWith('+')?clean:`+971${clean.replace(/^0/,'')}`;};
+  async function finishLogin(session:{token:string;user:{name:string;email:string;role:string}}){
+    if (session.user.role !== 'CUSTOMER') {
+      throw new Error('This account is not authorized for the Customer app.');
+    }
+    await Promise.all([
+      saveSessionToken(session.token),
+      AsyncStorage.setItem('wefyx-user', JSON.stringify(session.user)),
+    ]);
+    setPassword('');
+    setLoginOtp('');
+    setOtpPending(false);
+    onLogin();
+  }
   async function login() {
     setMessage('');
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      setMessage('Enter a valid email address.');
+    const identifier=email.trim();
+    const isPhone=/^\+?\d[\d\s()-]+$/.test(identifier);
+    if (!isPhone && !/^\S+@\S+\.\S+$/.test(identifier)) {
+      setMessage('Enter a valid email address or UAE mobile number.');
       return;
     }
     if (password.length < 6) {
@@ -339,21 +360,28 @@ function Login({ onLogin }: { onLogin: () => void }) {
     }
     setBusy(true);
     try {
-      const session = await apiLogin(email.trim(), password);
-      if (session.user.role !== 'CUSTOMER') {
-        throw new Error('This account is not authorized for the Customer app.');
+      if(isPhone){
+        const sent=await apiRequestLoginOtp(normalizePhone(identifier),password);
+        setLoginPhone(sent.phone);
+        setLoginOtp('');
+        setOtpPending(true);
+        setMessage(sent.message);
+        return;
       }
-      await Promise.all([
-        saveSessionToken(session.token),
-        AsyncStorage.setItem('wefyx-user', JSON.stringify(session.user)),
-      ]);
-      setPassword('');
-      onLogin();
+      await finishLogin(await apiLogin(identifier, password));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {
       setBusy(false);
     }
+  }
+  async function verifyPhoneLogin(){
+    setMessage('');
+    if(!/^[0-9]{6}$/.test(loginOtp)){setMessage('Enter the 6-digit OTP.');return;}
+    setBusy(true);
+    try{await finishLogin(await apiVerifyPhoneLogin(loginPhone,password,loginOtp));}
+    catch(error){setMessage(error instanceof Error ? error.message : 'Unable to verify OTP.');}
+    finally{setBusy(false);}
   }
   if(registering)return <Registration role="CUSTOMER" onBack={()=>setRegistering(false)} onRegistered={value=>{setEmail(value);setPassword('');setRegistering(false)}}/>;
   return (
@@ -397,22 +425,40 @@ function Login({ onLogin }: { onLogin: () => void }) {
                     Sign in to manage support operations.
                   </Text>
                   <Text className="font-semibold mb-2 mt-7 text-xs text-textSecondary">
-                    WORK EMAIL
+                    EMAIL OR MOBILE
                   </Text>
                   <View className="h-14 flex-row items-center rounded-2xl bg-inputBg px-4">
                     <Mail size={18} color="#075438" />
                     <TextInput
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(value)=>{setEmail(value);setOtpPending(false);setLoginOtp('');}}
                       autoCapitalize="none"
                       autoComplete="off"
                       textContentType="none"
                       keyboardType="email-address"
-                      placeholder="name@company.com"
+                      placeholder="name@company.com or +971501234567"
                       placeholderTextColor="#8A9F93"
                       className="font-regular ml-3 h-12 flex-1 text-textPrimary"
                     />
                   </View>
+                  {otpPending ? (
+                    <>
+                      <Text className="font-semibold mb-2 mt-4 text-xs text-textSecondary">
+                        SMS OTP
+                      </Text>
+                      <View className="h-14 flex-row items-center rounded-2xl bg-inputBg px-4">
+                        <Phone size={18} color="#075438" />
+                        <TextInput
+                          value={loginOtp}
+                          onChangeText={(value)=>setLoginOtp(value.replace(/\D/g,'').slice(0,6))}
+                          keyboardType="number-pad"
+                          placeholder="6-digit code"
+                          placeholderTextColor="#8A9F93"
+                          className="font-regular ml-3 h-12 flex-1 text-textPrimary"
+                        />
+                      </View>
+                    </>
+                  ) : null}
                   <View className="mb-2 mt-4 flex-row items-center justify-between">
                     <Text className="font-semibold text-xs text-textSecondary">
                       PASSWORD
@@ -455,14 +501,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
                   ) : null}
                   <Pressable
                     disabled={busy}
-                    onPress={login}
+                    onPress={otpPending?verifyPhoneLogin:login}
                     className="mt-6 h-14 items-center justify-center rounded-2xl bg-primary"
                   >
                     {busy ? (
                       <ActivityIndicator color="white" />
                     ) : (
                       <Text className="font-semibold text-base text-white">
-                        Sign in securely
+                        {otpPending?'Verify OTP & sign in':'Sign in securely'}
                       </Text>
                     )}
                   </Pressable>

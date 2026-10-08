@@ -42,7 +42,9 @@ import {
 import {
   apiGet,
   apiLogin,
+  apiRequestLoginOtp,
   apiSend,
+  apiVerifyPhoneLogin,
   clearSessionToken,
   getSessionToken,
   saveSessionToken,
@@ -610,20 +612,50 @@ function Login({ done }: { done: (u: User) => void }) {
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [registering,setRegistering]=useState(false),
+    [otpPending,setOtpPending]=useState(false),
+    [loginPhone,setLoginPhone]=useState(""),
+    [loginOtp,setLoginOtp]=useState(""),
     [error, setError] = useState("");
+  const normalizePhone=(value:string)=>{const clean=value.trim().replace(/[\s()-]/g,"");return clean.startsWith("+")?clean:`+971${clean.replace(/^0/,"")}`;};
+  async function finishLogin(d:{token:string;user:User}) {
+    if (d.user.role !== "VENDOR") {
+      throw new Error("This account is not authorized for the Vendor app");
+    }
+    await saveSessionToken(d.token);
+    await AsyncStorage.setItem("wefyx-vendor-user", JSON.stringify(d.user));
+    setPassword("");
+    setLoginOtp("");
+    setOtpPending(false);
+    done(d.user);
+  }
   async function submit() {
     setBusy(true);
     setError("");
     try {
-      let d = await apiLogin(email.trim(), password);
-      if (d.user.role !== "VENDOR") {
-        throw new Error("This account is not authorized for the Vendor app");
+      const identifier=email.trim();
+      const isPhone=/^\+?\d[\d\s()-]+$/.test(identifier);
+      if(isPhone){
+        const sent=await apiRequestLoginOtp(normalizePhone(identifier),password);
+        setLoginPhone(sent.phone);
+        setLoginOtp("");
+        setOtpPending(true);
+        return;
       }
-      await saveSessionToken(d.token);
-      await AsyncStorage.setItem("wefyx-vendor-user", JSON.stringify(d.user));
-      done(d.user);
+      await finishLogin(await apiLogin(identifier, password));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to sign in");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function verifyPhoneLogin() {
+    setBusy(true);
+    setError("");
+    try {
+      if(!/^[0-9]{6}$/.test(loginOtp)) throw new Error("Enter the 6-digit OTP.");
+      await finishLogin(await apiVerifyPhoneLogin(loginPhone,password,loginOtp));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to verify OTP");
     } finally {
       setBusy(false);
     }
@@ -644,14 +676,14 @@ function Login({ done }: { done: (u: User) => void }) {
         <Text style={s.loginSub}>
           Sign in to manage orders, products and settlements.
         </Text>
-        <Text style={s.label}>Vendor email</Text>
+        <Text style={s.label}>Vendor email or mobile</Text>
         <TextInput
           style={s.input}
           value={email}
-          onChangeText={setEmail}
+          onChangeText={value=>{setEmail(value);setOtpPending(false);setLoginOtp("");}}
           autoCapitalize="none"
           keyboardType="email-address"
-          placeholder="vendor@company.com"
+          placeholder="vendor@company.com or +971501234567"
         />
         <Text style={s.label}>Password</Text>
         <TextInput
@@ -661,12 +693,22 @@ function Login({ done }: { done: (u: User) => void }) {
           secureTextEntry
           placeholder="Enter password"
         />
+        {otpPending && <>
+          <Text style={s.label}>SMS OTP</Text>
+          <TextInput
+            style={s.input}
+            value={loginOtp}
+            onChangeText={value=>setLoginOtp(value.replace(/\D/g,"").slice(0,6))}
+            keyboardType="number-pad"
+            placeholder="6-digit code"
+          />
+        </>}
         {!!error && <Text style={s.error}>{error}</Text>}
-        <Pressable style={s.primary} disabled={busy} onPress={submit}>
+        <Pressable style={s.primary} disabled={busy} onPress={otpPending?verifyPhoneLogin:submit}>
           {busy ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={s.primaryT}>Sign in as Vendor</Text>
+            <Text style={s.primaryT}>{otpPending?"Verify OTP & Sign in":"Sign in as Vendor"}</Text>
           )}
         </Pressable>
         <Pressable style={{paddingVertical:12}} onPress={() => Linking.openURL('https://wefyx.pro/forgot-password').catch(() => Alert.alert('Unable to open recovery', 'Please try again.'))}><Text style={s.link}>Forgot password? Open website</Text></Pressable>

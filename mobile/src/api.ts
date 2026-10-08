@@ -21,9 +21,12 @@ export async function clearSessionToken() {
   await Keychain.resetGenericPassword({ service: SESSION_SERVICE });
 }
 
-export const API_ORIGIN = __DEV__
-  ? `http://${Platform.OS === 'android' ? '10.0.2.2' : 'localhost'}:8080`
-  : 'https://wefyx.pro';
+export const API_ORIGIN =
+  Platform.OS === 'ios'
+    ? 'https://wefyx.pro'
+    : __DEV__
+      ? 'http://10.0.2.2:8080'
+      : 'https://wefyx.pro';
 export const API_BASE = `${API_ORIGIN}/api`;
 
 let unauthorizedHandler: (() => void) | undefined;
@@ -78,8 +81,10 @@ async function read<T>(response: Response): Promise<T> {
   return response.json();
 }
 
-export async function apiLogin(email: string, password: string) {
+export async function apiLogin(identifier: string, password: string) {
   await ensureConnected();
+  const clean = identifier.trim();
+  const isPhone = /^\+?\d[\d\s()-]+$/.test(clean);
   return read<{
     token: string;
     user: { name: string; email: string; role: string };
@@ -87,7 +92,32 @@ export async function apiLogin(email: string, password: string) {
     await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(isPhone ? { phone: clean, password } : { email: clean, password }),
+    }),
+  );
+}
+
+export async function apiRequestLoginOtp(phone: string, password: string) {
+  await ensureConnected();
+  return read<{ success: boolean; message: string; phone: string; delivery: string }>(
+    await fetch(`${API_BASE}/auth/login/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, password }),
+    }),
+  );
+}
+
+export async function apiVerifyPhoneLogin(phone: string, password: string, otp: string) {
+  await ensureConnected();
+  return read<{
+    token: string;
+    user: { name: string; email: string; role: string };
+  }>(
+    await fetch(`${API_BASE}/auth/login/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, password, otp }),
     }),
   );
 }
