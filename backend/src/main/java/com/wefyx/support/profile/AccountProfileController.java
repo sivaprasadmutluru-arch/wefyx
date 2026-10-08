@@ -140,7 +140,7 @@ public class AccountProfileController {
     private void applyAddress(CustomerAddress item,Map<String,Object> body,com.wefyx.support.user.SupportUser account){
         item.setLabel(required(string(body.get("label")).isBlank()?"Delivery address":string(body.get("label")),"Address label"));
         item.setContactName(required(string(body.get("contactName")).isBlank()?account.getName():string(body.get("contactName")),"Contact name"));
-        item.setPhone(UserIdentity.phone(string(body.get("phone")).isBlank()?account.getPhone():string(body.get("phone")),true));
+        item.setPhone(cleanText(string(body.get("phone")).isBlank()?account.getPhone():string(body.get("phone")),40));
         item.setAddressLine(required(string(body.get("addressLine")),"Address"));
         item.setEmirate(clean(string(body.get("emirate"))).isBlank()?"Dubai":clean(string(body.get("emirate"))));
         item.setCountry(clean(string(body.get("country"))).isBlank()?"United Arab Emirates":clean(string(body.get("country"))));
@@ -154,4 +154,5 @@ public class AccountProfileController {
     private static String value(String value,String fallback){return value==null||value.isBlank()?fallback:value.trim();}
     private static String required(String value,String label){if(value==null||value.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,label+" is required");return value.trim();}
     private static String clean(String value){return value==null?"":value.trim();}
+    private static String cleanText(String value,int max){String clean=clean(value);return clean.length()>max?clean.substring(0,max):clean;}
 }

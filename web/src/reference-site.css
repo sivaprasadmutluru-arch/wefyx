@@ -611,17 +611,21 @@
 .cart-site .rp-pay-brand.paypal{min-width:68px}
 .cart-site .rp-pay-brand.paypal img{max-width:58px}
 .cart-site .rp-pay-brand.bank-transfer,.cart-site .rp-pay-brand.payment-link,.cart-site .rp-pay-brand.card-on-delivery,.cart-site .rp-pay-brand.cash-on-delivery,.cart-site .rp-pay-brand.pay-on-delivery{color:#007849}
-.cart-site .rp-stripe-box{margin-top:14px;border:1px solid #caeadf;border-radius:9px;background:linear-gradient(180deg,#ffffff,#f5fffb);padding:15px;box-shadow:0 10px 24px rgba(11,99,64,.07)}
-.cart-site .rp-stripe-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}
-.cart-site .rp-stripe-head b{display:block;font-size:14px;color:#123d2b}
-.cart-site .rp-stripe-head small{display:block;margin-top:3px;font-size:11px;line-height:1.4;color:#6a8d7f}
-.cart-site .rp-stripe-logos{display:flex;gap:5px;align-items:center;flex:none}
-.cart-site .rp-stripe-logos img{height:20px;max-width:44px;padding:3px 5px;border:1px solid #dcefe7;border-radius:5px;background:#fff}
-.cart-site .rp-stripe-box>label{display:block;margin-bottom:7px;font-size:12px;font-weight:800;color:#123d2b}
-.cart-site .rp-stripe-field{border:1px solid #cfe9df;border-radius:7px;background:#fff;padding:14px 13px;min-height:48px;box-shadow:inset 0 1px 0 rgba(18,61,43,.03)}
-.cart-site .rp-stripe-secure{display:flex!important;align-items:center;gap:6px;margin-top:9px!important;font-size:10px!important;line-height:1.45!important;color:#52796a!important}
+.cart-site .rp-stripe-box{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:12px!important;margin-top:14px;border:1px solid #caeadf;border-radius:10px;background:linear-gradient(180deg,#ffffff,#f5fffb);padding:16px;box-shadow:0 10px 24px rgba(11,99,64,.07)}
+.cart-site .rp-stripe-head{display:flex!important;align-items:flex-start;justify-content:space-between;gap:12px;margin:0}
+.cart-site .rp-stripe-head b{display:block;font-size:15px;color:#123d2b}
+.cart-site .rp-stripe-head small{display:block;margin-top:4px;font-size:11px;line-height:1.4;color:#6a8d7f}
+.cart-site .rp-stripe-logos{display:flex!important;gap:6px;align-items:center;flex:none}
+.cart-site .rp-stripe-logos img{height:22px;max-width:50px;padding:3px 6px;border:1px solid #dcefe7;border-radius:5px;background:#fff}
+.cart-site .rp-stripe-control{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:7px!important;min-width:0;width:100%}
+.cart-site .rp-stripe-control label{display:block!important;margin:0!important;font-size:12px!important;font-weight:800;color:#123d2b}
+.cart-site .rp-stripe-field{display:block!important;width:100%!important;min-width:0!important;border:1px solid #cfe9df;border-radius:8px;background:#fff;padding:15px 13px;min-height:50px;box-shadow:inset 0 1px 0 rgba(18,61,43,.03)}
+.cart-site .rp-stripe-field.has-error{border-color:#f1b7b7;background:#fffafa}
+.cart-site .rp-stripe-field .StripeElement,.cart-site .rp-stripe-field iframe{display:block!important;width:100%!important;min-width:100%!important}
+.cart-site .rp-stripe-error{display:block!important;font-size:11px!important;font-weight:700;color:#b91c1c!important;line-height:1.35!important}
+.cart-site .rp-stripe-secure{display:flex!important;align-items:flex-start;gap:6px;margin:0!important;font-size:11px!important;line-height:1.45!important;color:#52796a!important}
 .cart-site .rp-stripe-secure svg{width:14px;height:14px;color:#008553;flex:none}
-.cart-site .rp-stripe-box .rp-primary{height:46px!important;margin-top:13px!important;font-size:13px!important}
+.cart-site .rp-stripe-box .rp-primary{width:100%!important;height:46px!important;margin-top:0!important;font-size:13px!important}
 .cart-site .rp-stripe-box p{margin:8px 0 0;font-size:11px;color:#008553}
 @media(min-width:1101px){.cart-site .rp-cart-layout{grid-template-columns:minmax(400px,.7fr) minmax(720px,1.3fr);gap:18px}.cart-site .rp-cart-side{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);grid-template-areas:"address payment" "address summary";gap:12px;align-items:start}.cart-site .rp-cart-side .rp-summary{padding:13px}.cart-site .rp-cart-side .rp-summary:nth-of-type(1){grid-area:address}.cart-site .rp-cart-side .rp-summary:nth-of-type(2){grid-area:payment}.cart-site .rp-cart-side .rp-summary:nth-of-type(3){grid-area:summary}.cart-site .rp-cart-side .rp-cart-assurance{display:none}.cart-site .rp-summary h2{font-size:18px;padding-bottom:11px;margin-bottom:8px}.cart-site .rp-cart-side .rp-summary>div.mt-4{margin-top:10px!important;padding:12px!important}.cart-site .rp-cart-side .rp-summary>div.mt-4>b{margin-bottom:8px}.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.grid{gap:8px!important}.cart-site .rp-cart-side .rp-summary>div.mt-4 input{height:34px!important}.cart-site .rp-cart-side .rp-summary>div.mt-4 textarea{min-height:54px!important;height:54px!important}.cart-site .rp-cart-side .rp-summary>div.mt-4 .mt-3.flex button{min-height:34px;font-size:10px}.cart-site .rp-cart-side .rp-summary:has(input[name="paymentMethod"])>div.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;margin-top:8px!important}.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]){padding:8px!important;gap:7px!important}.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) b{font-size:11px}.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) b:before{min-width:38px;height:20px}.cart-site .rp-cart-side .rp-summary label:has(input[name="paymentMethod"]) small{display:none!important}.cart-site .rp-summary>p{font-size:11px;margin:6px 0}.cart-site .rp-summary>strong{font-size:12px;margin-top:10px}.cart-site .rp-summary>strong b{font-size:18px}.cart-site .rp-summary .rp-primary{height:40px;font-size:12px}.cart-site .rp-cart-or{margin:8px 0!important}.cart-site .rp-summary-actions a,.cart-site .rp-summary-actions button{min-height:35px;font-size:10px}.cart-site .rp-cart-side .rp-summary:nth-of-type(3)>label{margin-top:8px!important;padding:9px!important;line-height:1.35}.cart-site .rp-cart-items{min-height:214px}.cart-site .rp-cart-service{min-height:64px;padding:11px 14px}}
 @media(min-width:900px) and (max-width:1100px){.cart-site .rp-cart-layout{grid-template-columns:minmax(0,1fr) 420px}.cart-site .rp-cart-side{grid-template-columns:minmax(0,1fr)}}
