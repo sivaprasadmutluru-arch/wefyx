@@ -135,17 +135,18 @@ public class CustomerOrderController {
         try{order.setItemsJson(json.writeValueAsString(clean));}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Unable to save order");}
         var saved=orders.save(order);
         audit(saved,auth,"ORDER_CREATED","status",null,"PLACED","Customer checkout");
-        String checkoutUrl=null;
+        String checkoutUrl=null, paymentClientSecret=null, stripePublishableKey=null;
         if("CARD".equals(paymentMethod)){
-            var checkout=stripeCheckout(saved);
-            checkoutUrl=checkout.url();
-            saved.setPaymentReference(checkout.sessionId());
-            saved.setPaymentNotes("Stripe Checkout session created. Awaiting payment confirmation.");
+            var intent=stripePaymentIntent(saved);
+            paymentClientSecret=intent.clientSecret();
+            stripePublishableKey=stripePublishableKey();
+            saved.setPaymentReference(intent.paymentIntentId());
+            saved.setPaymentNotes("Stripe card payment created. Awaiting customer confirmation.");
             saved=orders.save(saved);
-            audit(saved,auth,"STRIPE_CHECKOUT_CREATED","paymentReference",null,checkout.sessionId(),"Stripe hosted checkout");
+            audit(saved,auth,"STRIPE_PAYMENT_INTENT_CREATED","paymentReference",null,intent.paymentIntentId(),"Stripe Elements card checkout");
         }
         notifications.send(account.getEmail(),null,"ORDER_PLACED","Order received",saved.getReference()+" has been received. Payment method: "+paymentMethod.replace('_',' ').toLowerCase(Locale.ROOT)+".");
-        return view(saved,checkoutUrl);
+        return view(saved,checkoutUrl,paymentClientSecret,stripePublishableKey);
     }
 
     @PostMapping("/stripe/webhook")
@@ -154,11 +155,12 @@ public class CustomerOrderController {
         if(!stripeSignatureValid(payload,signature))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid Stripe signature");
         try{
             Map<?,?> event=json.readValue(payload,Map.class);
-            if(!"checkout.session.completed".equals(String.valueOf(event.get("type"))))return ResponseEntity.ok(Map.of("status","ignored"));
+            String type=String.valueOf(event.get("type"));
             Map<?,?> data=(Map<?,?>)event.get("data"); Map<?,?> object=data==null?null:(Map<?,?>)data.get("object");
-            String sessionId=object==null?null:String.valueOf(object.get("id"));
-            String paymentIntent=object==null?null:String.valueOf(object.get("payment_intent"));
-            var order=orders.findAll().stream().filter(item->sessionId!=null&&sessionId.equals(item.getPaymentReference())).findFirst().orElse(null);
+            String paymentIntent="payment_intent.succeeded".equals(type)&&object!=null?String.valueOf(object.get("id")):object==null?null:String.valueOf(object.get("payment_intent"));
+            String sessionId="checkout.session.completed".equals(type)&&object!=null?String.valueOf(object.get("id")):null;
+            if(!"checkout.session.completed".equals(type)&&!"payment_intent.succeeded".equals(type))return ResponseEntity.ok(Map.of("status","ignored"));
+            var order=orders.findAll().stream().filter(item->(paymentIntent!=null&&paymentIntent.equals(item.getPaymentReference()))||(sessionId!=null&&sessionId.equals(item.getPaymentReference()))).findFirst().orElse(null);
             if(order==null)return ResponseEntity.ok(Map.of("status","order_not_found"));
             String previous=order.getPaymentStatus();
             order.setPaymentStatus("PAID");order.setPaidAt(LocalDateTime.now());order.setPaymentNotes("Stripe payment confirmed. Payment intent: "+value(paymentIntent,"n/a"));
@@ -167,6 +169,20 @@ public class CustomerOrderController {
             notifications.send(saved.getCustomerEmail(),null,"ORDER_PAYMENT","Payment received",saved.getReference()+" card payment was confirmed.");
             return ResponseEntity.ok(Map.of("status","ok"));
         }catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid Stripe event");}
+    }
+
+    @PostMapping("/{id}/stripe/confirm")
+    @Transactional
+    public View confirmStripePayment(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
+        var order=find(id);visible(order,auth);
+        String paymentIntentId=required(body.get("paymentIntentId"),"Payment intent");
+        if(!paymentIntentId.equals(order.getPaymentReference()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Payment does not match this order");
+        var intent=stripePaymentIntentStatus(paymentIntentId);
+        if(!"succeeded".equals(intent.status()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Stripe payment is "+intent.status());
+        String previous=order.getPaymentStatus();order.setPaymentStatus("PAID");order.setPaidAt(LocalDateTime.now());order.setPaymentNotes("Stripe payment confirmed. Payment intent: "+paymentIntentId);
+        var saved=orders.save(order);audit(saved,auth,"STRIPE_PAYMENT_CONFIRMED","paymentStatus",previous,"PAID",paymentIntentId);
+        notifications.send(saved.getCustomerEmail(),null,"ORDER_PAYMENT","Payment received",saved.getReference()+" card payment was confirmed.");
+        return view(saved);
     }
 
     @PatchMapping("/{id}/status")
@@ -316,6 +332,47 @@ public class CustomerOrderController {
         }catch(ResponseStatusException error){throw error;
         }catch(Exception error){throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Unable to create Stripe checkout session");}
     }
+    private StripePaymentIntent stripePaymentIntent(CustomerOrder order){
+        if(blank(stripeSecretKey))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Stripe is not configured yet. Add STRIPE_SECRET_KEY before taking card payments.");
+        try{
+            BigDecimal amount=order.getTotal().add(order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit());
+            Map<String,String> form=new LinkedHashMap<>();
+            form.put("amount",amount.movePointRight(2).setScale(0,RoundingMode.HALF_UP).toPlainString());
+            form.put("currency","aed");
+            form.put("receipt_email",order.getCustomerEmail());
+            form.put("description","Wefyx order "+order.getReference());
+            form.put("metadata[orderId]",String.valueOf(order.getId()));
+            form.put("metadata[orderReference]",order.getReference());
+            form.put("automatic_payment_methods[enabled]","true");
+            HttpRequest request=HttpRequest.newBuilder(URI.create("https://api.stripe.com/v1/payment_intents"))
+                .header(HttpHeaders.AUTHORIZATION,"Bearer "+stripeSecretKey.trim())
+                .header(HttpHeaders.CONTENT_TYPE,MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(form(form)))
+                .build();
+            HttpResponse<String> response=HttpClient.newHttpClient().send(request,HttpResponse.BodyHandlers.ofString());
+            Map<?,?> body=json.readValue(response.body(),Map.class);
+            Object errorBody=body.get("error");
+            if(response.statusCode()<200||response.statusCode()>299)throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,String.valueOf(errorBody instanceof Map<?,?> errorMap?errorMap.get("message"):"Stripe payment failed"));
+            return new StripePaymentIntent(String.valueOf(body.get("id")),String.valueOf(body.get("client_secret")),String.valueOf(body.get("status")));
+        }catch(ResponseStatusException error){throw error;
+        }catch(Exception error){throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Unable to create Stripe payment");}
+    }
+    private StripePaymentIntent stripePaymentIntentStatus(String paymentIntentId){
+        if(blank(stripeSecretKey))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Stripe is not configured yet.");
+        try{
+            HttpRequest request=HttpRequest.newBuilder(URI.create("https://api.stripe.com/v1/payment_intents/"+encode(paymentIntentId)))
+                .header(HttpHeaders.AUTHORIZATION,"Bearer "+stripeSecretKey.trim())
+                .GET()
+                .build();
+            HttpResponse<String> response=HttpClient.newHttpClient().send(request,HttpResponse.BodyHandlers.ofString());
+            Map<?,?> body=json.readValue(response.body(),Map.class);
+            Object errorBody=body.get("error");
+            if(response.statusCode()<200||response.statusCode()>299)throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,String.valueOf(errorBody instanceof Map<?,?> errorMap?errorMap.get("message"):"Stripe payment lookup failed"));
+            return new StripePaymentIntent(String.valueOf(body.get("id")),String.valueOf(body.get("client_secret")),String.valueOf(body.get("status")));
+        }catch(ResponseStatusException error){throw error;
+        }catch(Exception error){throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Unable to verify Stripe payment");}
+    }
+    private String stripePublishableKey(){return "pk_live_51UOALoJp4wmgGFoSx5XZnpZjvAIcCfE3NoTjPWGxcGYVDXwhOzASXgfNrjHwQwy69WLFADhoSx1q4sW02wurPLaL00LCuQif62";}
     private boolean stripeSignatureValid(String payload,String header){
         if(blank(stripeWebhookSecret))return false;
         if(blank(header))return false;
@@ -333,8 +390,9 @@ public class CustomerOrderController {
     private static String encode(String value){return URLEncoder.encode(value==null?"":value,StandardCharsets.UTF_8);}
     private byte[] invoicePdf(CustomerOrder order){String text="Wefyx.pro Invoice\n"+value(order.getInvoiceNumber(),order.getReference())+"\nOrder: "+order.getReference()+"\nCustomer: "+order.getCustomerName()+"\nSubtotal: AED "+order.getSubtotal()+"\nVAT: AED "+order.getVat()+"\nRefundable deposit: AED "+value(String.valueOf(order.getSecurityDeposit()),"0")+"\nAmount due: AED "+order.getTotal().add(order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit())+"\nPayment: "+value(order.getPaymentStatus(),"PENDING");String stream="BT /F1 14 Tf 50 780 Td ("+pdfText(text)+") Tj ET";String pdf="%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj\n4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n5 0 obj<</Length "+stream.length()+">>stream\n"+stream+"\nendstream endobj\nxref\n0 6\n0000000000 65535 f \ntrailer<</Root 1 0 R/Size 6>>\nstartxref\n0\n%%EOF";return pdf.getBytes(java.nio.charset.StandardCharsets.US_ASCII);}
     private static String pdfText(String value){return value.replace("\\","\\\\").replace("(","\\(").replace(")","\\)").replace("\n","\\n");}
-    private View view(CustomerOrder order){return view(order,null);}
-    private View view(CustomerOrder order,String checkoutUrl){try{BigDecimal deposit=order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit();return new View(order.getId(),order.getReference(),order.getCustomerEmail(),order.getCustomerName(),order.getOrganization(),order.getStatus(),order.getPaymentMethod(),order.getPaymentStatus(),order.getPaymentReference(),order.getPaymentProofUrl(),order.getPaymentNotes(),order.getInvoiceNumber(),order.getPaidAt(),order.getDeliveryStatus(),order.getTrackingNotes(),order.getCancellationReason(),order.getCancellationRequestStatus(),order.getCancellationRequestedAt(),order.getCancellationRequestReason(),order.getDepositStatus(),order.getDepositRefundReference(),order.getDepositDeductionReason(),order.getDepositRefundedAt(),order.getDispatchedAt(),order.getDeliveredAt(),order.getCurrency(),order.getSubtotal(),order.getVat(),deposit,order.getTotal(),order.getTotal().add(deposit),order.getItemCount(),order.isTermsAccepted(),order.getTermsAcceptedAt(),order.getTermsVersion(),order.isInventoryReleased(),json.readValue(order.getItemsJson(),Item[].class),new DeliveryAddress(null,order.getDeliveryLabel(),order.getDeliveryContactName(),order.getDeliveryPhone(),order.getDeliveryAddress(),order.getDeliveryEmirate(),order.getDeliveryCountry(),order.getDeliveryLatitude(),order.getDeliveryLongitude()),new DeliveryAddress(null,order.getBillingLabel(),order.getBillingContactName(),order.getBillingPhone(),order.getBillingAddress(),order.getBillingEmirate(),order.getBillingCountry(),null,null),order.getCreatedAt(),order.getUpdatedAt(),checkoutUrl);}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Order data is unavailable");}}
+    private View view(CustomerOrder order){return view(order,null,null,null);}
+    private View view(CustomerOrder order,String checkoutUrl){return view(order,checkoutUrl,null,null);}
+    private View view(CustomerOrder order,String checkoutUrl,String paymentClientSecret,String stripePublishableKey){try{BigDecimal deposit=order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit();return new View(order.getId(),order.getReference(),order.getCustomerEmail(),order.getCustomerName(),order.getOrganization(),order.getStatus(),order.getPaymentMethod(),order.getPaymentStatus(),order.getPaymentReference(),order.getPaymentProofUrl(),order.getPaymentNotes(),order.getInvoiceNumber(),order.getPaidAt(),order.getDeliveryStatus(),order.getTrackingNotes(),order.getCancellationReason(),order.getCancellationRequestStatus(),order.getCancellationRequestedAt(),order.getCancellationRequestReason(),order.getDepositStatus(),order.getDepositRefundReference(),order.getDepositDeductionReason(),order.getDepositRefundedAt(),order.getDispatchedAt(),order.getDeliveredAt(),order.getCurrency(),order.getSubtotal(),order.getVat(),deposit,order.getTotal(),order.getTotal().add(deposit),order.getItemCount(),order.isTermsAccepted(),order.getTermsAcceptedAt(),order.getTermsVersion(),order.isInventoryReleased(),json.readValue(order.getItemsJson(),Item[].class),new DeliveryAddress(null,order.getDeliveryLabel(),order.getDeliveryContactName(),order.getDeliveryPhone(),order.getDeliveryAddress(),order.getDeliveryEmirate(),order.getDeliveryCountry(),order.getDeliveryLatitude(),order.getDeliveryLongitude()),new DeliveryAddress(null,order.getBillingLabel(),order.getBillingContactName(),order.getBillingPhone(),order.getBillingAddress(),order.getBillingEmirate(),order.getBillingCountry(),null,null),order.getCreatedAt(),order.getUpdatedAt(),checkoutUrl,paymentClientSecret,stripePublishableKey);}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Order data is unavailable");}}
     private static BigDecimal bd(long value){return BigDecimal.valueOf(value);}
     private static void bad(String message){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,message);}
     private static boolean blank(String value){return value==null||value.isBlank();}
@@ -345,10 +403,11 @@ public class CustomerOrderController {
 
     public record Create(List<Item> items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,String paymentMethod,boolean termsAccepted,String termsVersion) {}
     public record StripeCheckout(String sessionId,String url) {}
+    public record StripePaymentIntent(String paymentIntentId,String clientSecret,String status) {}
     public record BulkStatus(List<Long> ids,String status,String reason) {}
     public record DeliveryAddress(Long id,String label,String contactName,String phone,String addressLine,String emirate,String country,Double latitude,Double longitude) {}
     public record Item(String productId,String name,String mode,BigDecimal unitPrice,int quantity,int months,BigDecimal lineTotal) {}
-    public record View(Long id,String reference,String customerEmail,String customerName,String organization,String status,String paymentMethod,String paymentStatus,String paymentReference,String paymentProofUrl,String paymentNotes,String invoiceNumber,LocalDateTime paidAt,String deliveryStatus,String trackingNotes,String cancellationReason,String cancellationRequestStatus,LocalDateTime cancellationRequestedAt,String cancellationRequestReason,String depositStatus,String depositRefundReference,String depositDeductionReason,LocalDateTime depositRefundedAt,LocalDateTime dispatchedAt,LocalDateTime deliveredAt,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal securityDeposit,BigDecimal total,BigDecimal amountDue,Integer itemCount,boolean termsAccepted,LocalDateTime termsAcceptedAt,String termsVersion,boolean inventoryReleased,Item[] items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,LocalDateTime createdAt,LocalDateTime updatedAt,String checkoutUrl) {}
+    public record View(Long id,String reference,String customerEmail,String customerName,String organization,String status,String paymentMethod,String paymentStatus,String paymentReference,String paymentProofUrl,String paymentNotes,String invoiceNumber,LocalDateTime paidAt,String deliveryStatus,String trackingNotes,String cancellationReason,String cancellationRequestStatus,LocalDateTime cancellationRequestedAt,String cancellationRequestReason,String depositStatus,String depositRefundReference,String depositDeductionReason,LocalDateTime depositRefundedAt,LocalDateTime dispatchedAt,LocalDateTime deliveredAt,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal securityDeposit,BigDecimal total,BigDecimal amountDue,Integer itemCount,boolean termsAccepted,LocalDateTime termsAcceptedAt,String termsVersion,boolean inventoryReleased,Item[] items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,LocalDateTime createdAt,LocalDateTime updatedAt,String checkoutUrl,String paymentClientSecret,String stripePublishableKey) {}
     public record PageView(List<View> content,long totalElements,int totalPages,int page,int size,long activeOrders,long completedOrders,BigDecimal orderValue,long unpaidOrders,long pendingPaymentLinks,long lowStockProducts,long delayedOrders) {}
     public record AuditView(Long id,String actorEmail,String action,String fieldName,String previousValue,String nextValue,String note,LocalDateTime createdAt){static AuditView from(OrderAuditEvent e){return new AuditView(e.getId(),e.getActorEmail(),e.getAction(),e.getFieldName(),e.getPreviousValue(),e.getNextValue(),e.getNote(),e.getCreatedAt());}}
 }
