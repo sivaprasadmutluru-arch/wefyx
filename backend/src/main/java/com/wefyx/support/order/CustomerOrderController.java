@@ -12,7 +12,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -33,10 +33,11 @@ public class CustomerOrderController {
     private final UserRepository users;
     private final AccessControl access;
     private final NotificationService notifications;
+    private final OrderAuditEventRepository audits;
     private final ObjectMapper json;
 
-    public CustomerOrderController(CustomerOrderRepository orders,CatalogProductRepository products,CustomerAddressRepository addresses,UserRepository users,AccessControl access,NotificationService notifications,ObjectMapper json){
-        this.orders=orders;this.products=products;this.addresses=addresses;this.users=users;this.access=access;this.notifications=notifications;this.json=json;
+    public CustomerOrderController(CustomerOrderRepository orders,CatalogProductRepository products,CustomerAddressRepository addresses,UserRepository users,AccessControl access,NotificationService notifications,OrderAuditEventRepository audits,ObjectMapper json){
+        this.orders=orders;this.products=products;this.addresses=addresses;this.users=users;this.access=access;this.notifications=notifications;this.audits=audits;this.json=json;
     }
 
     @GetMapping
@@ -50,6 +51,12 @@ public class CustomerOrderController {
 
     @GetMapping("/{id}")
     public View one(@PathVariable Long id,Authentication auth){var order=find(id);visible(order,auth);return view(order);}
+
+    @GetMapping("/{id}/audit")
+    public List<AuditView> audit(@PathVariable Long id,Authentication auth){var order=find(id);visible(order,auth);if(access.role(auth)==Role.CUSTOMER)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Order audit is available to staff only");return audits.findByOrderIdOrderByCreatedAtDesc(id).stream().map(AuditView::from).toList();}
+
+    @GetMapping("/{id}/invoice.pdf")
+    public ResponseEntity<byte[]> invoice(@PathVariable Long id,Authentication auth){var order=find(id);visible(order,auth);byte[] pdf=invoicePdf(order);return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\""+value(order.getInvoiceNumber(),order.getReference())+".pdf\"").body(pdf);}
 
     @GetMapping("/search")
     public PageView search(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="ALL") String status,@RequestParam(defaultValue="ALL") String mode,@RequestParam(required=false) String from,@RequestParam(required=false) String to,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size,Authentication auth){
@@ -87,6 +94,7 @@ public class CustomerOrderController {
         if(!input.termsAccepted())bad("Accept the rental, refund and delivery terms before checkout");
         var account=users.findByEmailIgnoreCase(auth.getName()).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Customer account not found"));
         DeliveryAddress delivery=delivery(input.deliveryAddress(),account,auth.getName());
+        DeliveryAddress billing=input.billingAddress()!=null&&!blank(input.billingAddress().addressLine())?clean(input.billingAddress(),account):delivery;
         List<Item> clean=new ArrayList<>(); BigDecimal subtotal=BigDecimal.ZERO; int itemCount=0;
         for(Item requested:input.items()){
             var product=products.findByCodeIgnoreCase(requested.productId()).filter(x->x.isActive()).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"Product is no longer available: "+requested.productId()));
@@ -107,10 +115,12 @@ public class CustomerOrderController {
         String paymentMethod=paymentMethod(input.paymentMethod());
         var order=new CustomerOrder();
         order.setReference(nextReference());order.setCustomerEmail(account.getEmail());order.setCustomerName(account.getName());order.setOrganization(account.getOrganization());
-        order.setStatus("PLACED");order.setPaymentMethod(paymentMethod);order.setPaymentStatus("PENDING");order.setDeliveryStatus("PENDING");order.setInvoiceNumber(nextInvoiceReference());order.setCurrency("AED");order.setSubtotal(subtotal);order.setVat(vat);order.setSecurityDeposit(securityDeposit);order.setTotal(subtotal.add(vat));order.setItemCount(itemCount);order.setTermsAccepted(true);order.setTermsAcceptedAt(LocalDateTime.now());
+        order.setStatus("PLACED");order.setPaymentMethod(paymentMethod);order.setPaymentStatus("PENDING");order.setDeliveryStatus("PENDING");order.setDepositStatus(securityDeposit.signum()>0?"HELD":"NOT_REQUIRED");order.setInvoiceNumber(nextInvoiceReference());order.setCurrency("AED");order.setSubtotal(subtotal);order.setVat(vat);order.setSecurityDeposit(securityDeposit);order.setTotal(subtotal.add(vat));order.setItemCount(itemCount);order.setTermsAccepted(true);order.setTermsAcceptedAt(LocalDateTime.now());order.setTermsVersion(value(input.termsVersion(),"2026-10-08"));
         order.setDeliveryLabel(delivery.label());order.setDeliveryContactName(delivery.contactName());order.setDeliveryPhone(delivery.phone());order.setDeliveryAddress(delivery.addressLine());order.setDeliveryEmirate(delivery.emirate());order.setDeliveryCountry(delivery.country());order.setDeliveryLatitude(delivery.latitude());order.setDeliveryLongitude(delivery.longitude());
+        order.setBillingLabel(billing.label());order.setBillingContactName(billing.contactName());order.setBillingPhone(billing.phone());order.setBillingAddress(billing.addressLine());order.setBillingEmirate(billing.emirate());order.setBillingCountry(billing.country());
         try{order.setItemsJson(json.writeValueAsString(clean));}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Unable to save order");}
         var saved=orders.save(order);
+        audit(saved,auth,"ORDER_CREATED","status",null,"PLACED","Customer checkout");
         notifications.send(account.getEmail(),null,"ORDER_PLACED","Order received",saved.getReference()+" has been received. Payment method: "+paymentMethod.replace('_',' ').toLowerCase(Locale.ROOT)+".");
         return view(saved);
     }
@@ -119,11 +129,12 @@ public class CustomerOrderController {
     public View status(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
         access.require(auth,Role.SUPER_ADMIN,Role.EMPLOYEE);var order=find(id);String next=String.valueOf(body.get("status")).toUpperCase(Locale.ROOT);
         if(!Set.of("PLACED","CONFIRMED","PROCESSING","DISPATCHED","COMPLETED","CANCELLED").contains(next))bad("Invalid order status");
-        order.setStatus(next);
+        String previous=order.getStatus();order.setStatus(next);
         if("DISPATCHED".equals(next)){order.setDeliveryStatus("DISPATCHED");if(order.getDispatchedAt()==null)order.setDispatchedAt(LocalDateTime.now());}
         if("COMPLETED".equals(next)){order.setDeliveryStatus("DELIVERED");if(order.getDeliveredAt()==null)order.setDeliveredAt(LocalDateTime.now());}
         if("CANCELLED".equals(next)){order.setDeliveryStatus("CANCELLED");order.setCancellationReason(value(body.get("reason"),order.getCancellationReason()));releaseInventory(order);}
         var saved=orders.save(order);
+        audit(saved,auth,"STATUS_CHANGED","status",previous,next,value(body.get("reason"),""));
         notifications.send(saved.getCustomerEmail(),null,"ORDER_STATUS","Order status updated",saved.getReference()+" is now "+next.toLowerCase(Locale.ROOT)+".");
         return view(saved);
     }
@@ -132,10 +143,11 @@ public class CustomerOrderController {
     public View payment(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
         access.require(auth,Role.SUPER_ADMIN,Role.EMPLOYEE);var order=find(id);String next=String.valueOf(body.get("paymentStatus")).toUpperCase(Locale.ROOT);
         if(!Set.of("UNPAID","PENDING","PAID","PARTIALLY_PAID","REFUNDED","FAILED").contains(next))bad("Invalid payment status");
-        order.setPaymentStatus(next);if("PAID".equals(next)&&order.getPaidAt()==null)order.setPaidAt(LocalDateTime.now());if(!"PAID".equals(next)&&!"PARTIALLY_PAID".equals(next))order.setPaidAt(null);
+        String previous=order.getPaymentStatus();order.setPaymentStatus(next);if("PAID".equals(next)&&order.getPaidAt()==null)order.setPaidAt(LocalDateTime.now());if(!"PAID".equals(next)&&!"PARTIALLY_PAID".equals(next))order.setPaidAt(null);
         if(!blank(body.get("invoiceNumber")))order.setInvoiceNumber(body.get("invoiceNumber").trim());if(!blank(body.get("paymentMethod")))order.setPaymentMethod(paymentMethod(body.get("paymentMethod")));
         order.setPaymentReference(cleanText(body.get("paymentReference"),120));order.setPaymentProofUrl(cleanText(body.get("paymentProofUrl"),500));order.setPaymentNotes(cleanText(body.get("paymentNotes"),1000));
         var saved=orders.save(order);
+        audit(saved,auth,"PAYMENT_CHANGED","paymentStatus",previous,next,order.getPaymentReference());
         notifications.send(saved.getCustomerEmail(),null,"ORDER_PAYMENT","Payment status updated",saved.getReference()+" payment is "+next.toLowerCase(Locale.ROOT).replace('_',' ')+".");
         return view(saved);
     }
@@ -148,19 +160,53 @@ public class CustomerOrderController {
         order.setPaymentReference(cleanText(body.get("paymentReference"),120));
         order.setPaymentNotes(cleanText(body.get("paymentNotes"),1000));
         order.setPaymentStatus("PENDING");
+        audit(order,auth,"PAYMENT_PROOF_SUBMITTED","paymentProofUrl",null,proof,order.getPaymentReference());
         notifications.send(order.getCustomerEmail(),null,"ORDER_PAYMENT_PROOF","Payment proof received",order.getReference()+" payment proof was submitted and is pending review.");
         return view(orders.save(order));
+    }
+
+    @PatchMapping("/{id}/cancel-request")
+    public View cancelRequest(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
+        var order=find(id);visible(order,auth);if(access.role(auth)!=Role.CUSTOMER)bad("Only customers can request cancellation from this endpoint");
+        if(Set.of("COMPLETED","CANCELLED").contains(order.getStatus()))bad("This order can no longer be cancelled");
+        order.setCancellationRequestStatus("REQUESTED");order.setCancellationRequestedAt(LocalDateTime.now());order.setCancellationRequestReason(cleanText(required(body.get("reason"),"Cancellation reason"),1000));
+        var saved=orders.save(order);audit(saved,auth,"CANCELLATION_REQUESTED","cancellationRequestStatus",null,"REQUESTED",order.getCancellationRequestReason());
+        notifications.send(saved.getCustomerEmail(),null,"ORDER_CANCELLATION","Cancellation requested",saved.getReference()+" cancellation request is under review.");
+        return view(saved);
+    }
+
+    @PatchMapping("/{id}/cancel-decision")
+    public View cancelDecision(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
+        access.require(auth,Role.SUPER_ADMIN,Role.EMPLOYEE);var order=find(id);String decision=String.valueOf(body.get("decision")).toUpperCase(Locale.ROOT);
+        if(!Set.of("APPROVED","REJECTED").contains(decision))bad("Invalid cancellation decision");
+        String previous=order.getCancellationRequestStatus();order.setCancellationRequestStatus(decision);order.setCancellationReason(value(body.get("reason"),order.getCancellationRequestReason()));
+        if("APPROVED".equals(decision)){order.setStatus("CANCELLED");order.setDeliveryStatus("CANCELLED");releaseInventory(order);}
+        var saved=orders.save(order);audit(saved,auth,"CANCELLATION_"+decision,"cancellationRequestStatus",previous,decision,order.getCancellationReason());
+        notifications.send(saved.getCustomerEmail(),null,"ORDER_CANCELLATION","Cancellation "+decision.toLowerCase(Locale.ROOT),saved.getReference()+" cancellation was "+decision.toLowerCase(Locale.ROOT)+".");
+        return view(saved);
+    }
+
+    @PatchMapping("/{id}/deposit")
+    public View deposit(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
+        access.require(auth,Role.SUPER_ADMIN,Role.EMPLOYEE);var order=find(id);String next=String.valueOf(body.get("depositStatus")).toUpperCase(Locale.ROOT);
+        if(!Set.of("NOT_REQUIRED","HELD","PARTIALLY_REFUNDED","REFUNDED","DEDUCTED").contains(next))bad("Invalid deposit status");
+        String previous=order.getDepositStatus();order.setDepositStatus(next);order.setDepositRefundReference(cleanText(body.get("depositRefundReference"),120));order.setDepositDeductionReason(cleanText(body.get("depositDeductionReason"),1000));
+        if(Set.of("REFUNDED","PARTIALLY_REFUNDED","DEDUCTED").contains(next)&&order.getDepositRefundedAt()==null)order.setDepositRefundedAt(LocalDateTime.now());
+        var saved=orders.save(order);audit(saved,auth,"DEPOSIT_CHANGED","depositStatus",previous,next,order.getDepositRefundReference());
+        notifications.send(saved.getCustomerEmail(),null,"ORDER_DEPOSIT","Deposit status updated",saved.getReference()+" deposit is "+next.toLowerCase(Locale.ROOT).replace('_',' ')+".");
+        return view(saved);
     }
 
     @PatchMapping("/{id}/fulfillment")
     public View fulfillment(@PathVariable Long id,@RequestBody Map<String,String> body,Authentication auth){
         access.require(auth,Role.SUPER_ADMIN,Role.EMPLOYEE);var order=find(id);String next=String.valueOf(body.get("deliveryStatus")).toUpperCase(Locale.ROOT);
         if(!Set.of("PENDING","PACKING","DISPATCHED","OUT_FOR_DELIVERY","DELIVERED","FAILED","CANCELLED").contains(next))bad("Invalid delivery status");
-        order.setDeliveryStatus(next);order.setTrackingNotes(cleanText(body.get("trackingNotes"),2000));
+        String previous=order.getDeliveryStatus();order.setDeliveryStatus(next);order.setTrackingNotes(cleanText(body.get("trackingNotes"),2000));
         if("DISPATCHED".equals(next)||"OUT_FOR_DELIVERY".equals(next)){if(order.getDispatchedAt()==null)order.setDispatchedAt(LocalDateTime.now());}
         if("DELIVERED".equals(next)){order.setStatus("COMPLETED");if(order.getDeliveredAt()==null)order.setDeliveredAt(LocalDateTime.now());}
         if("CANCELLED".equals(next)){order.setStatus("CANCELLED");order.setCancellationReason(value(body.get("reason"),order.getCancellationReason()));releaseInventory(order);}
         var saved=orders.save(order);
+        audit(saved,auth,"DELIVERY_CHANGED","deliveryStatus",previous,next,order.getTrackingNotes());
         notifications.send(saved.getCustomerEmail(),null,"ORDER_DELIVERY","Delivery status updated",saved.getReference()+" delivery is "+next.toLowerCase(Locale.ROOT).replace('_',' ')+".");
         return view(saved);
     }
@@ -194,7 +240,10 @@ public class CustomerOrderController {
         return new DeliveryAddress(input.id(),value(input.label(),"Delivery address"),value(input.contactName(),account.getName()),value(input.phone(),account.getPhone()),required(input.addressLine(),"Delivery address"),value(input.emirate(),"Dubai"),value(input.country(),"United Arab Emirates"),input.latitude(),input.longitude());
     }
     private void releaseInventory(CustomerOrder order){if(order.isInventoryReleased())return;try{for(Item item:json.readValue(order.getItemsJson(),Item[].class)){products.findByCodeIgnoreCase(item.productId()).ifPresent(product->{product.setStockQuantity((product.getStockQuantity()==null?0:product.getStockQuantity())+Math.max(1,item.quantity()));products.save(product);});}order.setInventoryReleased(true);}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Unable to release order inventory");}}
-    private View view(CustomerOrder order){try{BigDecimal deposit=order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit();return new View(order.getId(),order.getReference(),order.getCustomerEmail(),order.getCustomerName(),order.getOrganization(),order.getStatus(),order.getPaymentMethod(),order.getPaymentStatus(),order.getPaymentReference(),order.getPaymentProofUrl(),order.getPaymentNotes(),order.getInvoiceNumber(),order.getPaidAt(),order.getDeliveryStatus(),order.getTrackingNotes(),order.getCancellationReason(),order.getDispatchedAt(),order.getDeliveredAt(),order.getCurrency(),order.getSubtotal(),order.getVat(),deposit,order.getTotal(),order.getTotal().add(deposit),order.getItemCount(),order.isTermsAccepted(),order.getTermsAcceptedAt(),order.isInventoryReleased(),json.readValue(order.getItemsJson(),Item[].class),new DeliveryAddress(null,order.getDeliveryLabel(),order.getDeliveryContactName(),order.getDeliveryPhone(),order.getDeliveryAddress(),order.getDeliveryEmirate(),order.getDeliveryCountry(),order.getDeliveryLatitude(),order.getDeliveryLongitude()),order.getCreatedAt(),order.getUpdatedAt());}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Order data is unavailable");}}
+    private void audit(CustomerOrder order,Authentication auth,String action,String field,String previous,String next,String note){OrderAuditEvent event=new OrderAuditEvent();event.setOrderId(order.getId());event.setActorEmail(auth==null?null:auth.getName());event.setAction(action);event.setFieldName(field);event.setPreviousValue(cleanText(previous,1000));event.setNextValue(cleanText(next,1000));event.setNote(cleanText(note,2000));audits.save(event);}
+    private byte[] invoicePdf(CustomerOrder order){String text="Wefyx.pro Invoice\n"+value(order.getInvoiceNumber(),order.getReference())+"\nOrder: "+order.getReference()+"\nCustomer: "+order.getCustomerName()+"\nSubtotal: AED "+order.getSubtotal()+"\nVAT: AED "+order.getVat()+"\nRefundable deposit: AED "+value(String.valueOf(order.getSecurityDeposit()),"0")+"\nAmount due: AED "+order.getTotal().add(order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit())+"\nPayment: "+value(order.getPaymentStatus(),"PENDING");String stream="BT /F1 14 Tf 50 780 Td ("+pdfText(text)+") Tj ET";String pdf="%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj\n4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n5 0 obj<</Length "+stream.length()+">>stream\n"+stream+"\nendstream endobj\nxref\n0 6\n0000000000 65535 f \ntrailer<</Root 1 0 R/Size 6>>\nstartxref\n0\n%%EOF";return pdf.getBytes(java.nio.charset.StandardCharsets.US_ASCII);}
+    private static String pdfText(String value){return value.replace("\\","\\\\").replace("(","\\(").replace(")","\\)").replace("\n","\\n");}
+    private View view(CustomerOrder order){try{BigDecimal deposit=order.getSecurityDeposit()==null?BigDecimal.ZERO:order.getSecurityDeposit();return new View(order.getId(),order.getReference(),order.getCustomerEmail(),order.getCustomerName(),order.getOrganization(),order.getStatus(),order.getPaymentMethod(),order.getPaymentStatus(),order.getPaymentReference(),order.getPaymentProofUrl(),order.getPaymentNotes(),order.getInvoiceNumber(),order.getPaidAt(),order.getDeliveryStatus(),order.getTrackingNotes(),order.getCancellationReason(),order.getCancellationRequestStatus(),order.getCancellationRequestedAt(),order.getCancellationRequestReason(),order.getDepositStatus(),order.getDepositRefundReference(),order.getDepositDeductionReason(),order.getDepositRefundedAt(),order.getDispatchedAt(),order.getDeliveredAt(),order.getCurrency(),order.getSubtotal(),order.getVat(),deposit,order.getTotal(),order.getTotal().add(deposit),order.getItemCount(),order.isTermsAccepted(),order.getTermsAcceptedAt(),order.getTermsVersion(),order.isInventoryReleased(),json.readValue(order.getItemsJson(),Item[].class),new DeliveryAddress(null,order.getDeliveryLabel(),order.getDeliveryContactName(),order.getDeliveryPhone(),order.getDeliveryAddress(),order.getDeliveryEmirate(),order.getDeliveryCountry(),order.getDeliveryLatitude(),order.getDeliveryLongitude()),new DeliveryAddress(null,order.getBillingLabel(),order.getBillingContactName(),order.getBillingPhone(),order.getBillingAddress(),order.getBillingEmirate(),order.getBillingCountry(),null,null),order.getCreatedAt(),order.getUpdatedAt());}catch(JsonProcessingException error){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Order data is unavailable");}}
     private static BigDecimal bd(long value){return BigDecimal.valueOf(value);}
     private static void bad(String message){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,message);}
     private static boolean blank(String value){return value==null||value.isBlank();}
@@ -203,10 +252,11 @@ public class CustomerOrderController {
     private static String cleanText(String value,int max){if(blank(value))return null;String clean=value.trim();return clean.length()>max?clean.substring(0,max):clean;}
     private static String paymentMethod(String value){String clean=blank(value)?"PAY_ON_DELIVERY":value.trim().toUpperCase(Locale.ROOT);if(!Set.of("CARD","APPLE_PAY","GOOGLE_PAY","SAMSUNG_PAY","PAY_ON_DELIVERY","CASH_ON_DELIVERY","CARD_ON_DELIVERY","BANK_TRANSFER","TABBY","TAMARA","PAYPAL","PAYMENT_LINK").contains(clean))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid payment method");return clean;}
 
-    public record Create(List<Item> items,DeliveryAddress deliveryAddress,String paymentMethod,boolean termsAccepted) {}
+    public record Create(List<Item> items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,String paymentMethod,boolean termsAccepted,String termsVersion) {}
     public record BulkStatus(List<Long> ids,String status,String reason) {}
     public record DeliveryAddress(Long id,String label,String contactName,String phone,String addressLine,String emirate,String country,Double latitude,Double longitude) {}
     public record Item(String productId,String name,String mode,BigDecimal unitPrice,int quantity,int months,BigDecimal lineTotal) {}
-    public record View(Long id,String reference,String customerEmail,String customerName,String organization,String status,String paymentMethod,String paymentStatus,String paymentReference,String paymentProofUrl,String paymentNotes,String invoiceNumber,LocalDateTime paidAt,String deliveryStatus,String trackingNotes,String cancellationReason,LocalDateTime dispatchedAt,LocalDateTime deliveredAt,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal securityDeposit,BigDecimal total,BigDecimal amountDue,Integer itemCount,boolean termsAccepted,LocalDateTime termsAcceptedAt,boolean inventoryReleased,Item[] items,DeliveryAddress deliveryAddress,LocalDateTime createdAt,LocalDateTime updatedAt) {}
+    public record View(Long id,String reference,String customerEmail,String customerName,String organization,String status,String paymentMethod,String paymentStatus,String paymentReference,String paymentProofUrl,String paymentNotes,String invoiceNumber,LocalDateTime paidAt,String deliveryStatus,String trackingNotes,String cancellationReason,String cancellationRequestStatus,LocalDateTime cancellationRequestedAt,String cancellationRequestReason,String depositStatus,String depositRefundReference,String depositDeductionReason,LocalDateTime depositRefundedAt,LocalDateTime dispatchedAt,LocalDateTime deliveredAt,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal securityDeposit,BigDecimal total,BigDecimal amountDue,Integer itemCount,boolean termsAccepted,LocalDateTime termsAcceptedAt,String termsVersion,boolean inventoryReleased,Item[] items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,LocalDateTime createdAt,LocalDateTime updatedAt) {}
     public record PageView(List<View> content,long totalElements,int totalPages,int page,int size,long activeOrders,long completedOrders,BigDecimal orderValue,long unpaidOrders,long pendingPaymentLinks,long lowStockProducts,long delayedOrders) {}
+    public record AuditView(Long id,String actorEmail,String action,String fieldName,String previousValue,String nextValue,String note,LocalDateTime createdAt){static AuditView from(OrderAuditEvent e){return new AuditView(e.getId(),e.getActorEmail(),e.getAction(),e.getFieldName(),e.getPreviousValue(),e.getNextValue(),e.getNote(),e.getCreatedAt());}}
 }

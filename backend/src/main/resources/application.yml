@@ -23,6 +23,9 @@ spring:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
     open-in-view: false
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    baseline-on-migrate: true
   h2:
     console:
       enabled: ${H2_CONSOLE_ENABLED:false}

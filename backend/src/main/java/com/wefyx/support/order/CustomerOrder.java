@@ -32,7 +32,21 @@ public class CustomerOrder {
     @Column(nullable = false, columnDefinition = "text") private String itemsJson;
     private boolean termsAccepted;
     private LocalDateTime termsAcceptedAt;
+    @Column(length = 40) private String termsVersion;
     private boolean inventoryReleased;
+    @Column(length = 40) private String cancellationRequestStatus;
+    private LocalDateTime cancellationRequestedAt;
+    @Column(length = 1000) private String cancellationRequestReason;
+    @Column(length = 40) private String depositStatus;
+    @Column(length = 120) private String depositRefundReference;
+    @Column(length = 1000) private String depositDeductionReason;
+    private LocalDateTime depositRefundedAt;
+    @Column(length = 80) private String billingLabel;
+    @Column(length = 120) private String billingContactName;
+    @Column(length = 40) private String billingPhone;
+    @Column(length = 1000) private String billingAddress;
+    @Column(length = 80) private String billingEmirate;
+    @Column(length = 80) private String billingCountry;
     @Column(length = 80) private String deliveryLabel;
     @Column(length = 120) private String deliveryContactName;
     @Column(length = 40) private String deliveryPhone;
@@ -74,7 +88,21 @@ public class CustomerOrder {
     public String getItemsJson(){return itemsJson;} public void setItemsJson(String v){itemsJson=v;}
     public boolean isTermsAccepted(){return termsAccepted;} public void setTermsAccepted(boolean v){termsAccepted=v;}
     public LocalDateTime getTermsAcceptedAt(){return termsAcceptedAt;} public void setTermsAcceptedAt(LocalDateTime v){termsAcceptedAt=v;}
+    public String getTermsVersion(){return termsVersion;} public void setTermsVersion(String v){termsVersion=v;}
     public boolean isInventoryReleased(){return inventoryReleased;} public void setInventoryReleased(boolean v){inventoryReleased=v;}
+    public String getCancellationRequestStatus(){return cancellationRequestStatus;} public void setCancellationRequestStatus(String v){cancellationRequestStatus=v;}
+    public LocalDateTime getCancellationRequestedAt(){return cancellationRequestedAt;} public void setCancellationRequestedAt(LocalDateTime v){cancellationRequestedAt=v;}
+    public String getCancellationRequestReason(){return cancellationRequestReason;} public void setCancellationRequestReason(String v){cancellationRequestReason=v;}
+    public String getDepositStatus(){return depositStatus;} public void setDepositStatus(String v){depositStatus=v;}
+    public String getDepositRefundReference(){return depositRefundReference;} public void setDepositRefundReference(String v){depositRefundReference=v;}
+    public String getDepositDeductionReason(){return depositDeductionReason;} public void setDepositDeductionReason(String v){depositDeductionReason=v;}
+    public LocalDateTime getDepositRefundedAt(){return depositRefundedAt;} public void setDepositRefundedAt(LocalDateTime v){depositRefundedAt=v;}
+    public String getBillingLabel(){return billingLabel;} public void setBillingLabel(String v){billingLabel=v;}
+    public String getBillingContactName(){return billingContactName;} public void setBillingContactName(String v){billingContactName=v;}
+    public String getBillingPhone(){return billingPhone;} public void setBillingPhone(String v){billingPhone=v;}
+    public String getBillingAddress(){return billingAddress;} public void setBillingAddress(String v){billingAddress=v;}
+    public String getBillingEmirate(){return billingEmirate;} public void setBillingEmirate(String v){billingEmirate=v;}
+    public String getBillingCountry(){return billingCountry;} public void setBillingCountry(String v){billingCountry=v;}
     public String getDeliveryLabel(){return deliveryLabel;} public void setDeliveryLabel(String v){deliveryLabel=v;}
     public String getDeliveryContactName(){return deliveryContactName;} public void setDeliveryContactName(String v){deliveryContactName=v;}
     public String getDeliveryPhone(){return deliveryPhone;} public void setDeliveryPhone(String v){deliveryPhone=v;}
