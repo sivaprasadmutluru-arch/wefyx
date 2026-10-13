@@ -30,5 +30,18 @@ target 'WefyxSupportMobile' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Keep the app target from depending on AsyncStorage's generated build
+    # products path during Swift compilation. Xcode can compile AppDelegate.swift
+    # before that copied modulemap exists during archive, while this pod support
+    # modulemap is available immediately after `pod install`.
+    async_storage_modulemap = '${PODS_ROOT}/Target Support Files/AsyncStorage/AsyncStorage.modulemap'
+    generated_async_storage_modulemap = '${PODS_CONFIGURATION_BUILD_DIR}/AsyncStorage/AsyncStorage.modulemap'
+
+    Dir.glob("#{Pod::Config.instance.installation_root}/Pods/Target Support Files/Pods-WefyxSupportMobile/Pods-WefyxSupportMobile.*.xcconfig").each do |xcconfig_path|
+      contents = File.read(xcconfig_path)
+      updated_contents = contents.gsub(generated_async_storage_modulemap, async_storage_modulemap)
+      File.write(xcconfig_path, updated_contents) if contents != updated_contents
+    end
   end
 end

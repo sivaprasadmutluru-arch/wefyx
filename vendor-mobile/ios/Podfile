@@ -30,5 +30,12 @@ target 'WefyxSupportMobile' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    Dir.glob("#{Pod::Config.instance.installation_root}/Pods/Target Support Files/Pods-WefyxSupportMobile/Pods-WefyxSupportMobile.*.xcconfig").each do |xcconfig_path|
+      File.open(xcconfig_path, "a") do |file|
+        file.puts "SWIFT_ENABLE_EXPLICIT_MODULES = NO"
+        file.puts "CLANG_ENABLE_MODULES = YES"
+      end
+    end
   end
 end
