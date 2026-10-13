@@ -86,6 +86,12 @@ export function UaeFlag({ width = 24, height = 15, className = "" }) {
   );
 }
 
+const phoneCountryOptions = [
+  ["+971", "🇦🇪 +971"],
+  ["+91", "🇮🇳 +91"],
+];
+const validOtpPhone = phone => /^(\+9715[024568][0-9]{7}|\+91[6-9][0-9]{9})$/.test(phone);
+
 function BrandHeader() {
   return (
     <header className="wf-auth-header">
@@ -155,7 +161,9 @@ export default function PublicRegistration({ initialView = "login" }) {
 
   // Login Form (Unified simple login for ALL roles without any role selector tabs)
   const [loginForm, setLoginForm] = useState({
+    method: "phone",
     identifier: "",
+    dialCode: "+971",
     verifiedPhone: "",
     otp: "",
     password: "",
@@ -253,7 +261,7 @@ export default function PublicRegistration({ initialView = "login" }) {
 
   function normalizeLoginPhone(phone) {
     const cleanPhone = phone.trim().replace(/[\s()-]/g, "");
-    return cleanPhone.startsWith("+") ? cleanPhone : `+971${cleanPhone.replace(/^0/, "")}`;
+    return cleanPhone.startsWith("+") ? cleanPhone : `${loginForm.dialCode}${cleanPhone.replace(/^0/, "")}`;
   }
 
   // Action: Screen 1 -> Screen 2 (Account access)
@@ -262,7 +270,7 @@ export default function PublicRegistration({ initialView = "login" }) {
     setError("");
     setSuccess("");
     const full = normalizeSignupPhone();
-    if (!/^\+9715[024568][0-9]{7}$/.test(full)) return setError("Enter a valid UAE mobile number with country code +971, for example +971501234567.");
+    if (!validOtpPhone(full)) return setError("Enter a valid UAE or India mobile number, for example +971501234567 or +919618810386.");
     if (form.password.length < 8 || new TextEncoder().encode(form.password).length > 72) return setError("Password must be at least 8 characters and no more than 72 bytes.");
     setForm((curr) => ({ ...curr, fullPhone: full }));
     setView("business");
@@ -368,13 +376,13 @@ export default function PublicRegistration({ initialView = "login" }) {
   async function requestPhoneOrEmailLogin() {
     const id = loginForm.identifier.trim();
     if (!id) {
-      return setError("Please enter your email or mobile number.");
+      return setError(loginForm.method === "email" ? "Please enter your email address." : "Please enter your mobile number.");
     }
     setBusy(true);
     try {
-      const isPhone = id.replace(/\s+/g, "").match(/^\+?\d+$/);
-      if (isPhone) {
+      if (loginForm.method !== "email") {
         const phone = normalizeLoginPhone(id);
+        if (!validOtpPhone(phone)) return setError("Enter a valid UAE or India mobile number, for example +971501234567 or +919618810386.");
         const result = await sendPublic("/auth/login/send-otp", "POST", { phone });
         setLoginForm((curr) => ({ ...curr, verifiedPhone: result.phone, otp: "" }));
         setSuccess(result.message);
@@ -385,19 +393,21 @@ export default function PublicRegistration({ initialView = "login" }) {
       if (!loginForm.password) {
         return setError("Please enter your password.");
       }
-      const payload = isPhone
-        ? { phone: id, password: loginForm.password }
-        : { email: id, password: loginForm.password };
+      const payload = { email: id, password: loginForm.password };
 
       const res = await sendPublic("/auth/login", "POST", payload);
       if (res.token) {
+        if (res.user.role === "SUPER_ADMIN") {
+          setError("Administrator login has moved to /admin/login.");
+          return;
+        }
         localStorage.setItem("wefyx-token", res.token);
         localStorage.setItem("wefyx-auth", "true");
         localStorage.setItem("wefyx-user", JSON.stringify(res.user));
         localStorage.setItem("wefyx-account-type", (res.user.role || "customer").toLowerCase());
         const returnTo = new URLSearchParams(window.location.search).get("returnTo");
         const customerDestination = returnTo && /^\/(account|cart|shop|rent|services|book-support|my-tickets)(\/|\?|$)/.test(returnTo) && !returnTo.includes("\\") ? returnTo : "/account";
-        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/portal");
+        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/admin/login");
       }
     } catch (err) {
       setError(err.message || "Invalid credentials. Please check your email/mobile and password.");
@@ -416,13 +426,17 @@ export default function PublicRegistration({ initialView = "login" }) {
         otp: loginForm.otp,
       });
       if (res.token) {
+        if (res.user.role === "SUPER_ADMIN") {
+          setError("Administrator login has moved to /admin/login.");
+          return;
+        }
         localStorage.setItem("wefyx-token", res.token);
         localStorage.setItem("wefyx-auth", "true");
         localStorage.setItem("wefyx-user", JSON.stringify(res.user));
         localStorage.setItem("wefyx-account-type", (res.user.role || "customer").toLowerCase());
         const returnTo = new URLSearchParams(window.location.search).get("returnTo");
         const customerDestination = returnTo && /^\/(account|cart|shop|rent|services|book-support|my-tickets)(\/|\?|$)/.test(returnTo) && !returnTo.includes("\\") ? returnTo : "/account";
-        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/portal");
+        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/admin/login");
       }
     } catch (err) {
       setError(err.message || "Invalid OTP. Please check and try again.");
@@ -560,9 +574,9 @@ export default function PublicRegistration({ initialView = "login" }) {
                   <label className="wf-form-label">
                     Mobile Number<i>*</i>
                   </label>
-                  <div className="wf-phone-wrapper">
-                    <div className="wf-flag-badge">
-                      <select aria-label="Mobile country code" value={form.dialCode} onChange={update("dialCode")}><option value="+971">UAE +971</option></select>
+                    <div className="wf-phone-wrapper">
+                      <div className="wf-flag-badge">
+                      <select aria-label="Mobile country code" value={form.dialCode} onChange={update("dialCode")}>{phoneCountryOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
                     </div>
                     <input
                       type="tel"
@@ -1005,9 +1019,9 @@ export default function PublicRegistration({ initialView = "login" }) {
 
                 <div className="wf-review-card">
                   <div className="wf-review-card-top">
-                    <h4>Address</h4>
+                    <h4>Address &amp; Access</h4>
                     <button type="button" onClick={() => setView("address")} className="wf-edit-btn">
-                      <Edit2 size={13} /> Edit
+                      <Edit2 size={13} /> Edit Address
                     </button>
                   </div>
                   <dl className="wf-review-rows">
@@ -1019,9 +1033,13 @@ export default function PublicRegistration({ initialView = "login" }) {
                     <dd>{form.country}</dd>
 
                     <dt className="wf-review-subhead">Account Access</dt>
-                    <dd className="wf-review-subhead" />
+                    <dd className="wf-review-subhead">
+                      <button type="button" onClick={() => setView("signup")} className="wf-edit-btn">
+                        <Edit2 size={13} /> Edit Phone
+                      </button>
+                    </dd>
                     <dt>Mobile Number</dt>
-                    <dd>{form.fullPhone}</dd>
+                    <dd>{form.fullPhone || normalizeSignupPhone()}</dd>
                     <dt>Assigned Role</dt>
                     <dd className="text-emerald-700 font-bold">Customer (Default)</dd>
                   </dl>
@@ -1138,28 +1156,74 @@ export default function PublicRegistration({ initialView = "login" }) {
               <div className="wf-divider">OR</div>
 
               <form onSubmit={handleLoginSubmit}>
+                <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-emerald-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setLoginForm((curr) => ({ ...curr, method: "phone", identifier: "", password: "" }))}
+                    className={`h-10 rounded-lg text-xs font-bold transition ${loginForm.method !== "email" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-emerald-700"}`}
+                  >
+                    Mobile Number
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLoginForm((curr) => ({ ...curr, method: "email", identifier: "", password: "" }))}
+                    className={`h-10 rounded-lg text-xs font-bold transition ${loginForm.method === "email" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-emerald-700"}`}
+                  >
+                    Email
+                  </button>
+                </div>
                 <div className="wf-form-group">
                   <label className="wf-form-label" htmlFor="login-id">
-                    Email address or Mobile Number
+                    {loginForm.method === "email" ? "Email Address" : "Mobile Number"}
                   </label>
-                  <div className="wf-input-with-icon">
-                    <span className="wf-input-icon">
-                      <Mail size={17} />
-                    </span>
-                    <input
-                      id="login-id"
-                      type="text"
-                      value={loginForm.identifier}
-                      onChange={(e) =>
-                        setLoginForm({ ...loginForm, identifier: e.target.value })
-                      }
-                      placeholder="admin@wefyx.pro or +971 50 123 4567"
-                      required
-                    />
-                  </div>
+                  {loginForm.method !== "email" ? (
+                    <div className="wf-phone-wrapper">
+                      <div className="wf-flag-badge">
+                        <select
+                          aria-label="Login country code"
+                          value={loginForm.dialCode}
+                          onChange={(e) => setLoginForm({ ...loginForm, dialCode: e.target.value })}
+                        >
+                          {phoneCountryOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                        </select>
+                      </div>
+                      <input
+                        id="login-id"
+                        type="tel"
+                        inputMode="tel"
+                        value={loginForm.identifier}
+                        onChange={(e) =>
+                          setLoginForm({ ...loginForm, identifier: e.target.value })
+                        }
+                        placeholder="50 123 4567"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <div className="wf-input-with-icon">
+                      <span className="wf-input-icon">
+                        <Mail size={17} />
+                      </span>
+                      <input
+                        id="login-id"
+                        type="email"
+                        value={loginForm.identifier}
+                        onChange={(e) =>
+                          setLoginForm({ ...loginForm, identifier: e.target.value })
+                        }
+                        placeholder="you@company.com"
+                        required
+                      />
+                    </div>
+                  )}
+                  <span className="wf-helper">
+                    {loginForm.method !== "email"
+                      ? "We'll send an OTP to this mobile number. No password needed."
+                      : "Email login uses your password."}
+                  </span>
                 </div>
 
-                {loginForm.identifier.trim().replace(/\s+/g, "").match(/^\+?\d+$/) ? null : <div className="wf-form-group">
+                {loginForm.method === "email" ? <div className="wf-form-group">
                   <div className="flex items-center justify-between">
                     <label className="wf-form-label" htmlFor="login-pass">
                       Password
@@ -1195,7 +1259,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                </div>}
+                </div> : null}
 
                 <div className="wf-remember-row">
                   <label className="wf-checkbox-label">
@@ -1335,7 +1399,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                     </label>
                     <div className="wf-phone-wrapper">
                       <div className="wf-flag-badge">
-                        <select aria-label="Recovery country code" value={forgotDialCode} onChange={(e) => setForgotDialCode(e.target.value)}><option value="+971">UAE +971</option></select>
+                        <select aria-label="Recovery country code" value={forgotDialCode} onChange={(e) => setForgotDialCode(e.target.value)}>{phoneCountryOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
                       </div>
                       <input
                         type="tel"

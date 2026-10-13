@@ -3,6 +3,7 @@
 **/build/
 **/dist/
 **/target/
+**/.m2/
 **/.gradle/
 **/.cxx/
 **/.kotlin/

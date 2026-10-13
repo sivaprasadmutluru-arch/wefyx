@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class PublicPageController {
     @GetMapping({
-        "/portal", "/account", "/account/{section}", "/book-support", "/book-support/{step}", "/my-tickets", "/my-tickets/{id}",
+        "/portal", "/admin", "/admin/{section}", "/admin/{section}/{id}", "/account", "/account/{section}", "/book-support", "/book-support/{step}", "/my-tickets", "/my-tickets/{id}",
         "/service-tasks", "/service-tasks/{id}", "/service-tasks/{id}/report", "/support-updates/{id}",
         "/register", "/signup", "/join", "/login", "/signin", "/forgot-password", "/reset-password",
         "/careers", "/become-a-vendor", "/rent", "/rent/{product}", "/rent-equipment",

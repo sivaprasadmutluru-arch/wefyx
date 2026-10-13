@@ -836,9 +836,9 @@
   border: 1.5px solid #d1dbd7;
   border-radius: 10px;
   background: #ffffff;
-  padding: 0 14px;
+  padding: 0 10px;
   height: 50px;
-  gap: 10px;
+  gap: 8px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -850,9 +850,21 @@
 .wf-flag-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   user-select: none;
   flex-shrink: 0;
+}
+
+.wf-flag-badge select {
+  width: 92px;
+  min-width: 92px;
+  border: 0;
+  background: transparent;
+  color: #153b2a;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
 }
 
 .wf-prefix-text {
@@ -864,6 +876,7 @@
 
 .wf-phone-wrapper input {
   flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   padding: 0;

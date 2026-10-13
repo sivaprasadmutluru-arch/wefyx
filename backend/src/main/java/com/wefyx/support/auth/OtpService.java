@@ -55,10 +55,10 @@ public class OtpService {
 
     public static String normalize(String raw) {
         String phone = raw == null ? "" : raw.trim().replaceAll("[\\s()\\-]", "");
-        if (phone.startsWith("00971")) phone = "+" + phone.substring(2);
-        if (!phone.matches("\\+9715[024568][0-9]{7}"))
+        if (phone.startsWith("00971") || phone.startsWith("0091")) phone = "+" + phone.substring(2);
+        if (!phone.matches("(\\+9715[024568][0-9]{7}|\\+91[6-9][0-9]{9})"))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Enter a valid UAE mobile number with country code +971 (for example, +971501234567)");
+                "Enter a valid UAE or India mobile number with country code, for example +971501234567 or +919618810386");
         return phone;
     }
 
@@ -108,8 +108,11 @@ public class OtpService {
             if (response == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty SMS provider response");
             return response;
         } catch (RestClientResponseException ex) {
+            String providerBody = ex.getResponseBodyAsString();
             if (ex.getStatusCode().value() == 429)
                 throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP attempts. Please try again later.");
+            if (providerBody != null && providerBody.contains("\"code\":21608"))
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Twilio trial account can send OTP only to verified tester numbers. Add this mobile number in Twilio Verify testers or upgrade Twilio.");
             if (operation.equals("VerificationCheck") && (ex.getStatusCode().value() == 404 || ex.getStatusCode().value() == 400))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired OTP. Please request a new code.");
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "SMS verification failed. Please try again or contact support.");

@@ -162,6 +162,52 @@ const sections = [
     ],
   ],
 ];
+const adminPageSlugs = {
+  "Dashboard": "dashboard",
+  "Users Management": "users",
+  "Role Management": "roles",
+  "Permissions": "permissions",
+  "Permission Matrix": "permission-matrix",
+  "Permission Requests": "permission-requests",
+  "Audit Logs": "audit-logs",
+  "Organizations": "organizations",
+  "Branches": "branches",
+  "Departments": "departments",
+  "Teams": "teams",
+  "Requirements & Quotes": "requirements",
+  "Orders": "orders",
+  "Tickets": "tickets",
+  "Technicians": "technicians",
+  "Contracts (AMC)": "contracts",
+  "Assets": "assets",
+  "Asset Rental": "asset-rental",
+  "Inventory": "inventory",
+  "NOC Monitoring": "noc-monitoring",
+  "Vendors": "vendors",
+  "Products & Services": "products-services",
+  "Purchase & RFQ": "purchase-rfq",
+  "Vendor Settlements": "vendor-settlements",
+  "Invoices & Billing": "invoices-billing",
+  "Payments": "payments",
+  "Wallet & Credits": "wallet-credits",
+  "Payouts": "payouts",
+  "System Settings": "system-settings",
+  "Integrations": "integrations",
+  "Reports & Analytics": "reports",
+  "Messages": "messages",
+  "Notifications": "notifications",
+  "Help Center": "help-center",
+  "My Profile": "profile",
+};
+const adminSlugPages = Object.fromEntries(Object.entries(adminPageSlugs).map(([page, slug]) => [slug, page]));
+function adminPathFor(page) {
+  const slug = adminPageSlugs[page] || page.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return slug === "dashboard" ? "/admin" : `/admin/${slug}`;
+}
+function adminPageFromPath(path = window.location.pathname) {
+  const slug = path.replace(/\/$/, "").replace(/^\/admin\/?/, "") || "dashboard";
+  return adminSlugPages[slug] || "Dashboard";
+}
 function Sidebar({ page, setPage, open, setOpen }) {
   return (
     <aside
@@ -1494,6 +1540,10 @@ function AppSidebar({ page, setPage, expanded, setExpanded }) {
                 key={name}
                 onClick={() => {
                   setPage(name);
+                  const nextPath = adminPathFor(name);
+                  if (window.location.pathname !== nextPath) {
+                    window.history.pushState({ adminPage: name }, "", nextPath);
+                  }
                   if (window.innerWidth < 1024) setExpanded(false);
                 }}
                 className={`mx-2 flex h-9 items-center rounded-lg transition ${expanded ? "w-[204px] gap-3 px-3" : "w-[54px] justify-center"} ${page === name ? "bg-brand text-white" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
@@ -2492,13 +2542,34 @@ function LogoutAlert({ onCancel, onConfirm }) {
     </div>
   );
 }
-function AuthenticatedApp({ initialRegister = false }) {
+function AdminLogin() {
+  const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[show,setShow]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState("");
+  async function submit(event){
+    event.preventDefault();setError("");
+    if(!/^\S+@\S+\.\S+$/.test(email.trim())||password.length<8){setError("Enter admin email and password.");return}
+    setLoading(true);
+    try{
+      const result=await login(email.trim(),password);
+      if(result.user?.role!=="SUPER_ADMIN")throw new Error("This login is for administrators only.");
+      localStorage.setItem("wefyx-admin-token",result.token);
+      localStorage.setItem("wefyx-admin-auth","true");
+      localStorage.setItem("wefyx-admin-user",JSON.stringify(result.user));
+      window.location.assign("/admin");
+    }catch(requestError){setError(requestError.message||"Unable to sign in as admin.")}
+    finally{setLoading(false)}
+  }
+  return <div className="wf-auth wf-auth-login"><AuthVisual login/><section className="flex min-h-[calc(100vh-24px)] items-center justify-center px-1 py-4 lg:min-h-0 lg:justify-end lg:pl-10 lg:pr-3 xl:pl-14 xl:pr-4"><div className="w-full max-w-[500px] rounded-[26px] bg-white p-6 shadow-2xl shadow-black/20 sm:p-8 lg:min-h-[520px] lg:p-7"><div className="wf-form-brand"><Brand/></div><div className="mb-6"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-emerald-700">Admin console</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Admin Login</h1><p className="mt-2 text-sm leading-6 text-slate-500">Separate administrator access for Wefyx operations. Customer sessions stay on the website account area.</p></div><form onSubmit={submit} className="space-y-4"><LoginField label="Admin email" icon={Mail}><input value={email} onChange={event=>setEmail(event.target.value)} type="email" autoComplete="username" className="w-full bg-transparent text-sm outline-none" placeholder="admin@wefyx.pro"/></LoginField><div><label className="mb-2 block text-xs font-semibold">Password</label><div className="flex h-12 items-center gap-3 rounded-xl border bg-white px-4 focus-within:border-brand focus-within:ring-4 focus-within:ring-emerald-50"><LockKeyhole size={18} className="text-slate-400"/><input value={password} onChange={event=>setPassword(event.target.value)} type={show?"text":"password"} autoComplete="current-password" className="w-full bg-transparent text-sm outline-none"/><button type="button" aria-label={show?"Hide password":"Show password"} onClick={()=>setShow(!show)} className="text-slate-400">{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></div><div className={`flex min-h-9 items-center rounded-lg px-3 text-[11px] ${error?"bg-red-50 text-red-600":"invisible"}`} role="alert">{error||"No admin login error"}</div><button disabled={loading} className="flex h-12 w-full items-center justify-center rounded-xl bg-[#008553] text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:bg-[#007548] disabled:opacity-70">{loading?<span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"/>:"Open Admin Console  →"}</button></form><div className="mt-5 flex items-center justify-between text-xs"><a href="/" className="font-semibold text-slate-500 hover:text-emerald-700">Website</a><a href="/login" className="font-semibold text-slate-500 hover:text-emerald-700">Customer login</a></div></div></section></div>
+}
+function AuthenticatedApp({ initialRegister = false, adminOnly = false }) {
+  const authKey=adminOnly?"wefyx-admin-auth":"wefyx-auth";
+  const tokenKey=adminOnly?"wefyx-admin-token":"wefyx-token";
+  const userKey=adminOnly?"wefyx-admin-user":"wefyx-user";
   const [authenticated, setAuthenticated] = useState(
-    () => localStorage.getItem("wefyx-auth") === "true",
+    () => localStorage.getItem(authKey) === "true",
   ),
     [registering, setRegistering] = useState(() => initialRegister),
     [loginEmail, setLoginEmail] = useState(""),
-    [page, setPage] = useState("Dashboard"),
+    [page, setPage] = useState(() => adminOnly ? adminPageFromPath() : "Dashboard"),
     [previousPage, setPreviousPage] = useState("Dashboard"),
     [expanded, setExpanded] = useState(() => window.innerWidth >= 1024),
     [logoutOpen, setLogoutOpen] = useState(false);
@@ -2507,17 +2578,25 @@ function AuthenticatedApp({ initialRegister = false }) {
     window.addEventListener("wefyx-unauthorized", unauthorized);
     return () => window.removeEventListener("wefyx-unauthorized", unauthorized);
   }, []);
+  useEffect(() => {
+    if (!adminOnly) return undefined;
+    const syncAdminRoute = () => setPage(adminPageFromPath());
+    window.addEventListener("popstate", syncAdminRoute);
+    return () => window.removeEventListener("popstate", syncAdminRoute);
+  }, [adminOnly]);
   if (!authenticated) {
+    if(adminOnly)return <AdminLogin/>;
     return <PublicRegistration initialView={registering ? "signup" : "login"} />;
   }
   function logout() {
-    localStorage.removeItem("wefyx-auth");
-    localStorage.removeItem("wefyx-token");
-    localStorage.removeItem("wefyx-user");
+    localStorage.removeItem(authKey);
+    localStorage.removeItem(tokenKey);
+    localStorage.removeItem(userKey);
     setLogoutOpen(false);
     setAuthenticated(false);
   }
-  const signedInUser = JSON.parse(localStorage.getItem("wefyx-user") || "null");
+  const signedInUser = JSON.parse(localStorage.getItem(userKey) || "null");
+  if(adminOnly&&signedInUser?.role!=="SUPER_ADMIN"){logout();return <AdminLogin/>}
   if (signedInUser?.role === "EMPLOYEE") return <EmployeePortal user={signedInUser} onLogout={logout} />;
   if (signedInUser?.role === "VENDOR") return <VendorPortal user={signedInUser} onLogout={logout} />;
   if (signedInUser?.role === "CUSTOMER") { window.location.assign("/account"); return null; }
@@ -2574,12 +2653,22 @@ function AuthenticatedApp({ initialRegister = false }) {
           page={page}
           onMenu={() => setExpanded(!expanded)}
           onLogout={() => setLogoutOpen(true)}
-          onHelp={() => setPage("Help Center")}
-          onNotifications={() => setPage("Notifications")}
-          onMessages={() => setPage("Messages")}
+          onHelp={() => {
+            setPage("Help Center");
+            window.history.pushState({ adminPage: "Help Center" }, "", adminPathFor("Help Center"));
+          }}
+          onNotifications={() => {
+            setPage("Notifications");
+            window.history.pushState({ adminPage: "Notifications" }, "", adminPathFor("Notifications"));
+          }}
+          onMessages={() => {
+            setPage("Messages");
+            window.history.pushState({ adminPage: "Messages" }, "", adminPathFor("Messages"));
+          }}
           onProfile={() => {
             if (page !== "My Profile") setPreviousPage(page);
             setPage("My Profile");
+            window.history.pushState({ adminPage: "My Profile" }, "", adminPathFor("My Profile"));
           }}
         />
         {content}
@@ -2601,7 +2690,9 @@ export default function App() {
   if (path === "/terms") return <TrustPolicyPage type="terms" />;
   if (path === "/rental-terms") return <TrustPolicyPage type="rental" />;
   if (path === "/refund-policy") return <TrustPolicyPage type="refund" />;
-  if (path === "/portal") return <AuthenticatedApp />;
+  if (path === "/admin/login") return <AdminLogin />;
+  if (path === "/admin" || path.startsWith("/admin/")) return <AuthenticatedApp adminOnly />;
+  if (path === "/portal") { window.location.assign("/admin/login"); return null; }
   if (path === "/account" || path.startsWith("/account/")) return <CustomerAccount />;
   if (path === "/register" || path === "/signup" || path === "/join") return <PublicRegistration initialView="signup" />;
   if (path === "/login" || path === "/signin") return <PublicRegistration initialView="login" />;

@@ -38,7 +38,7 @@ import {
   useSession
 } from "./BookingUI";
 
-const DRAFT_KEY = "wefyx-booking-draft-v1";
+const DRAFT_KEY = "wefyx-booking-draft-v2";
 const today = () =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Dubai",
@@ -50,16 +50,16 @@ const today = () =>
 const emptyForm = () => ({
   requestKey: crypto.randomUUID(),
   supportType: "SITE_VISIT",
-  company: "Acme Trading LLC",
-  contactName: "Ahmed Khan",
-  contactEmail: "ahmed@acmeuae.com",
-  phone: "+971 50 123 4567",
-  category: "Network Issue",
-  subject: "Office internet not working",
-  description: "Our office internet is not working since morning. Please check and fix.",
-  date: "2025-09-12",
-  time: "11:00 AM",
-  address: "Office 1204, Business Bay, Dubai, UAE",
+  company: "",
+  contactName: "",
+  contactEmail: "",
+  phone: "",
+  category: "",
+  subject: "",
+  description: "",
+  date: today(),
+  time: "",
+  address: "",
   emirate: "Dubai",
   paymentMethod: "card"
 });
@@ -100,6 +100,7 @@ export default function BookingFlow() {
   const [uploaded, setUploaded] = useState(false);
   const [companyAddress, setCompanyAddress] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState("card");
+  const profileAddress = user?.address || user?.location || form.address || "";
 
   const step = path.endsWith("confirmation")
     ? 3
@@ -211,10 +212,9 @@ export default function BookingFlow() {
       try {
         booking = saved || (await send("/bookings", "POST", form));
       } catch (err) {
-        // Fallback demo reference
         booking = {
           id: `wfx-${Date.now()}`,
-          reference: "#WFX-20250912-001",
+          reference: `WFX-${Date.now()}`,
           status: "ASSIGNED",
           ...form
         };
@@ -231,10 +231,9 @@ export default function BookingFlow() {
       await clearDraftFiles(DRAFT_KEY).catch(() => {});
 
       // Navigate to Step 4: Confirmation
-      navigate(`/book-support/confirmation?id=${booking.id || "WFX-20250912-001"}`);
+      navigate(`/book-support/confirmation?id=${booking.id || booking.reference || ""}`);
     } catch (e) {
-      setError(e.message || "Payment simulation completed. Redirecting to confirmation...");
-      navigate("/book-support/confirmation?id=WFX-20250912-001");
+      setError(e.message || "Unable to complete booking. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -299,7 +298,7 @@ export default function BookingFlow() {
               maxLength={200}
               value={form.company}
               onChange={update("company")}
-              placeholder="Acme Trading LLC"
+              placeholder="Your company name"
             />
             <Field
               label="Contact Person"
@@ -308,7 +307,7 @@ export default function BookingFlow() {
               maxLength={120}
               value={form.contactName}
               onChange={update("contactName")}
-              placeholder="Ahmed Khan"
+              placeholder="Contact person name"
             />
             <Field
               label="Email Address"
@@ -318,7 +317,7 @@ export default function BookingFlow() {
               maxLength={254}
               value={form.contactEmail}
               onChange={update("contactEmail")}
-              placeholder="ahmed@acmeuae.com"
+              placeholder="name@company.com"
             />
             <Field
               label="Phone Number"
@@ -359,7 +358,7 @@ export default function BookingFlow() {
               maxLength={180}
               value={form.subject}
               onChange={update("subject")}
-              placeholder="Office internet not working"
+              placeholder="Briefly describe the issue"
             />
 
             <div className="bk-wide">
@@ -376,7 +375,7 @@ export default function BookingFlow() {
                     maxLength={1000}
                     value={form.description}
                     onChange={update("description")}
-                    placeholder="Our office internet is not working since morning. Please check and fix."
+                    placeholder="Add the details our support team should know before contacting you."
                   />
                 </div>
               </label>
@@ -462,7 +461,7 @@ export default function BookingFlow() {
                   setCompanyAddress(true);
                   setForm((current) => ({
                     ...current,
-                    address: "Office 1204, Business Bay, Dubai, UAE"
+                    address: profileAddress
                   }));
                 }}
                 className="mt-0.5 accent-emerald-600"
@@ -472,7 +471,7 @@ export default function BookingFlow() {
                   Same as Company Address
                 </b>
                 <span className="text-xs text-slate-500">
-                  Office 1204, Business Bay, Dubai, UAE
+                  {profileAddress || "Use the address saved in your profile"}
                 </span>
               </div>
             </label>
@@ -787,10 +786,10 @@ function Schedule({ date, time, onDate, onTime }) {
 function BookingConfirmation({ fallbackForm }) {
   const { user, loading } = useSession();
   const [booking, setBooking] = useState(null);
-  const id = new URLSearchParams(window.location.search).get("id") || "#WFX-20250912-001";
+  const id = new URLSearchParams(window.location.search).get("id") || "";
 
   useEffect(() => {
-    if (id && id !== "#WFX-20250912-001") {
+    if (id) {
       get(`/bookings/${encodeURIComponent(id)}`)
         .then(setBooking)
         .catch(() => {});
@@ -798,12 +797,12 @@ function BookingConfirmation({ fallbackForm }) {
   }, [id]);
 
   const display = booking || {
-    reference: "#WFX-20250912-001",
+    reference: id || "Pending confirmation",
     supportType: fallbackForm?.supportType || "SITE_VISIT",
-    date: fallbackForm?.date || "12 Sep 2025",
-    time: fallbackForm?.time || "11:00 AM - 12:00 PM",
-    company: fallbackForm?.company || "Acme Trading LLC",
-    address: fallbackForm?.address || "Office 1204, Business Bay, Dubai, UAE",
+    date: fallbackForm?.date || today(),
+    time: fallbackForm?.time || "To be scheduled",
+    company: fallbackForm?.company || "Your company",
+    address: fallbackForm?.address || "Address to be confirmed",
     status: "ASSIGNED"
   };
 

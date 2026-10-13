@@ -44,6 +44,7 @@ wefyx:
   payments:
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
+      publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
       success-url: ${STRIPE_SUCCESS_URL:http://localhost:5173/account/orders?payment=stripe_success}
       cancel-url: ${STRIPE_CANCEL_URL:http://localhost:5173/cart?payment=stripe_cancelled}

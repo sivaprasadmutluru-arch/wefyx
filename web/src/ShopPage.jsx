@@ -30,7 +30,7 @@ import {
 import UnifiedHeader from "./UnifiedHeader";
 import { PublicFooter } from "./RentalPages";
 import AIQuotationModal from "./AIQuotationModal";
-import { addToCart, cartCount, loadCart } from "./cart";
+import { addToCart, cartCount, loadCart, saveCart, CART_EVENT } from "./cart";
 import { get } from "./api";
 
 const shopIds = {
@@ -180,6 +180,22 @@ export default function ShopPage() {
     const key = cartKeyFor(product);
     return cartItems.filter((item) => `${item.id}:${item.mode || "RENT"}` === key).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
   };
+  const updateProductQuantity = (product, change) => {
+    const key = cartKeyFor(product);
+    const nextCart = loadCart()
+      .map((item) => {
+        const itemKey = `${item.id}:${item.mode || "RENT"}`;
+        if (itemKey !== key) return item;
+        return { ...item, quantity: Math.max(0, Number(item.quantity || 1) + change), selected: true };
+      })
+      .filter((item) => Number(item.quantity || 0) > 0);
+    setCartItems(saveCart(nextCart));
+  };
+  const removeProduct = (product) => {
+    const key = cartKeyFor(product);
+    const nextCart = loadCart().filter((item) => `${item.id}:${item.mode || "RENT"}` !== key);
+    setCartItems(saveCart(nextCart));
+  };
 
   const categories = [
     { name: "All", label: "All Products" },
@@ -215,6 +231,15 @@ export default function ShopPage() {
     setSelectedProduct(product.name);
     setTimeout(() => setSelectedProduct(null), 2500);
   };
+  useEffect(() => {
+    const refreshCart = (event) => setCartItems(Array.isArray(event.detail) ? event.detail : loadCart());
+    window.addEventListener(CART_EVENT, refreshCart);
+    window.addEventListener("storage", refreshCart);
+    return () => {
+      window.removeEventListener(CART_EVENT, refreshCart);
+      window.removeEventListener("storage", refreshCart);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
@@ -342,15 +367,52 @@ export default function ShopPage() {
                   </div>
 
                   <div className="mt-4 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={prod.stockQuantity === 0}
-                      onClick={() => addProduct(prod)}
-                      className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold shadow transition disabled:cursor-not-allowed disabled:bg-slate-300 ${addedQuantity ? "bg-emerald-700 text-white hover:bg-emerald-800" : "bg-slate-900 text-white hover:bg-slate-800"}`}
-                    >
-                      {addedQuantity ? <Check size={14} /> : <ShoppingCart size={14} />}
-                      <span>{prod.stockQuantity === 0 ? "Out of stock" : addedQuantity ? `Added (${addedQuantity})` : selectedProduct === prod.name ? "Added" : "Add to cart"}</span>
-                    </button>
+                    {addedQuantity ? (
+                      <div className="flex flex-1 overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900">
+                        <button
+                          type="button"
+                          onClick={() => updateProductQuantity(prod, -1)}
+                          className="grid w-10 place-items-center border-r border-emerald-200 text-base font-black transition hover:bg-white"
+                          aria-label={`Remove one ${prod.name}`}
+                        >
+                          −
+                        </button>
+                        <div className="flex min-w-0 flex-1 items-center justify-center gap-1 px-2 text-xs font-extrabold">
+                          <Check size={13} />
+                          <span>{addedQuantity} in cart</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={prod.stockQuantity > 0 && addedQuantity >= prod.stockQuantity}
+                          onClick={() => updateProductQuantity(prod, 1)}
+                          className="grid w-10 place-items-center border-l border-emerald-200 text-base font-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Add one more ${prod.name}`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={prod.stockQuantity === 0}
+                        onClick={() => addProduct(prod)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        <ShoppingCart size={14} />
+                        <span>{prod.stockQuantity === 0 ? "Out of stock" : selectedProduct === prod.name ? "Added" : "Add to cart"}</span>
+                      </button>
+                    )}
+                    {addedQuantity ? (
+                      <button
+                        type="button"
+                        onClick={() => removeProduct(prod)}
+                        className="inline-flex w-11 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 transition hover:bg-red-50"
+                        title="Remove from cart"
+                        aria-label={`Remove ${prod.name} from cart`}
+                      >
+                        <X size={16} />
+                      </button>
+                    ) : null}
                     <a
                       href="/rent"
                       className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"

@@ -46,6 +46,7 @@ public class CustomerOrderController {
     private final OrderAuditEventRepository audits;
     private final ObjectMapper json;
     @Value("${wefyx.payments.stripe.secret-key:}") private String stripeSecretKey;
+    @Value("${wefyx.payments.stripe.publishable-key:}") private String stripePublishableKey;
     @Value("${wefyx.payments.stripe.webhook-secret:}") private String stripeWebhookSecret;
     @Value("${wefyx.payments.stripe.success-url:http://localhost:5173/account/orders?payment=stripe_success}") private String stripeSuccessUrl;
     @Value("${wefyx.payments.stripe.cancel-url:http://localhost:5173/cart?payment=stripe_cancelled}") private String stripeCancelUrl;
@@ -117,10 +118,12 @@ public class CustomerOrderController {
             if("RENT".equals(mode)&&!product.isRentable())bad(product.getName()+" is not available to rent");
             int quantity=Math.max(1,Math.min(100,requested.quantity()));
             if(product.getStockQuantity()==null||product.getStockQuantity()<quantity)bad("Only "+Math.max(0,product.getStockQuantity()==null?0:product.getStockQuantity())+" units are available for "+product.getName());
-            int months="BUY".equals(mode)?1:Math.max(1,Math.min(36,requested.months()));
-            BigDecimal unit="BUY".equals(mode)?product.getBuyPrice():product.getRentalPrice();
-            BigDecimal line=unit.multiply(bd(quantity)).multiply(bd(months));
-            clean.add(new Item(product.getCode(),product.getName(),mode,unit,quantity,months,line));
+            String rentalPeriod="BUY".equals(mode)?null:rentalPeriod(requested.rentalPeriod());
+            int duration="BUY".equals(mode)?1:rentalDuration(requested.rentalDuration()>0?requested.rentalDuration():requested.months(),rentalPeriod);
+            int months="BUY".equals(mode)?1:("MONTH".equals(rentalPeriod)?duration:1);
+            BigDecimal unit="BUY".equals(mode)?product.getBuyPrice():rentalUnit(product.getRentalPrice(),rentalPeriod);
+            BigDecimal line=unit.multiply(bd(quantity)).multiply(bd(duration));
+            clean.add(new Item(product.getCode(),product.getName(),mode,unit,quantity,months,line,rentalPeriod,duration,cleanText(requested.startDate(),20)));
             product.setStockQuantity(product.getStockQuantity()-quantity);products.save(product);
             subtotal=subtotal.add(line); itemCount+=quantity;
         }
@@ -379,7 +382,7 @@ public class CustomerOrderController {
         }catch(ResponseStatusException error){throw error;
         }catch(Exception error){throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Unable to verify Stripe payment");}
     }
-    private String stripePublishableKey(){return "pk_live_51UOALoJp4wmgGFoSx5XZnpZjvAIcCfE3NoTjPWGxcGYVDXwhOzASXgfNrjHwQwy69WLFADhoSx1q4sW02wurPLaL00LCuQif62";}
+    private String stripePublishableKey(){return stripePublishableKey;}
     private boolean stripeSignatureValid(String payload,String header){
         if(blank(stripeWebhookSecret))return false;
         if(blank(header))return false;
@@ -408,13 +411,16 @@ public class CustomerOrderController {
     private static String cleanText(String value,int max){if(blank(value))return null;String clean=value.trim();return clean.length()>max?clean.substring(0,max):clean;}
     private static String paymentMethod(String value){String clean=blank(value)?"PAY_ON_DELIVERY":value.trim().toUpperCase(Locale.ROOT);if(!Set.of("CARD","APPLE_PAY","GOOGLE_PAY","SAMSUNG_PAY","PAY_ON_DELIVERY","CASH_ON_DELIVERY","CARD_ON_DELIVERY","BANK_TRANSFER","TABBY","TAMARA","PAYPAL","PAYMENT_LINK").contains(clean))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid payment method");return clean;}
     private static boolean stripeHostedPayment(String value){return Set.of("APPLE_PAY","GOOGLE_PAY","SAMSUNG_PAY","TABBY","TAMARA","PAYPAL","PAYMENT_LINK").contains(value);}
+    private static String rentalPeriod(String value){String clean=blank(value)?"MONTH":value.trim().toUpperCase(Locale.ROOT);if(!Set.of("DAY","WEEK","MONTH").contains(clean))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid rental period");return clean;}
+    private static int rentalDuration(int value,String period){int max="MONTH".equals(period)?36:"WEEK".equals(period)?52:365;return Math.max(1,Math.min(max,value));}
+    private static BigDecimal rentalUnit(BigDecimal monthly,String period){if(monthly==null)monthly=BigDecimal.ZERO;if("DAY".equals(period))return monthly.divide(new BigDecimal("30"),2,RoundingMode.CEILING);if("WEEK".equals(period))return monthly.divide(new BigDecimal("4"),2,RoundingMode.CEILING);return monthly;}
 
     public record Create(List<Item> items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,String paymentMethod,boolean termsAccepted,String termsVersion) {}
     public record StripeCheckout(String sessionId,String url) {}
     public record StripePaymentIntent(String paymentIntentId,String clientSecret,String status) {}
     public record BulkStatus(List<Long> ids,String status,String reason) {}
     public record DeliveryAddress(Long id,String label,String contactName,String phone,String addressLine,String emirate,String country,Double latitude,Double longitude) {}
-    public record Item(String productId,String name,String mode,BigDecimal unitPrice,int quantity,int months,BigDecimal lineTotal) {}
+    public record Item(String productId,String name,String mode,BigDecimal unitPrice,int quantity,int months,BigDecimal lineTotal,String rentalPeriod,int rentalDuration,String startDate) {}
     public record View(Long id,String reference,String customerEmail,String customerName,String organization,String status,String paymentMethod,String paymentStatus,String paymentReference,String paymentProofUrl,String paymentNotes,String invoiceNumber,LocalDateTime paidAt,String deliveryStatus,String trackingNotes,String cancellationReason,String cancellationRequestStatus,LocalDateTime cancellationRequestedAt,String cancellationRequestReason,String depositStatus,String depositRefundReference,String depositDeductionReason,LocalDateTime depositRefundedAt,LocalDateTime dispatchedAt,LocalDateTime deliveredAt,String currency,BigDecimal subtotal,BigDecimal vat,BigDecimal securityDeposit,BigDecimal total,BigDecimal amountDue,Integer itemCount,boolean termsAccepted,LocalDateTime termsAcceptedAt,String termsVersion,boolean inventoryReleased,Item[] items,DeliveryAddress deliveryAddress,DeliveryAddress billingAddress,LocalDateTime createdAt,LocalDateTime updatedAt,String checkoutUrl,String paymentClientSecret,String stripePublishableKey) {}
     public record PageView(List<View> content,long totalElements,int totalPages,int page,int size,long activeOrders,long completedOrders,BigDecimal orderValue,long unpaidOrders,long pendingPaymentLinks,long lowStockProducts,long delayedOrders) {}
     public record AuditView(Long id,String actorEmail,String action,String fieldName,String previousValue,String nextValue,String note,LocalDateTime createdAt){static AuditView from(OrderAuditEvent e){return new AuditView(e.getId(),e.getActorEmail(),e.getAction(),e.getFieldName(),e.getPreviousValue(),e.getNextValue(),e.getNote(),e.getCreatedAt());}}
