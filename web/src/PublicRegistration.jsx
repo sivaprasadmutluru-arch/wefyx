@@ -113,13 +113,12 @@ function BrandHeader() {
   );
 }
 
-function OnboardingStepper({ current }) {
-  const steps = [
+function OnboardingStepper({ current, steps = [
     { id: "verify", label: "Verify" },
     { id: "business", label: "Business Details" },
     { id: "address", label: "Address" },
     { id: "complete", label: "Complete" },
-  ];
+  ] }) {
   return (
     <ol className="wf-onboarding-stepper" aria-label="Onboarding Progress">
       {steps.map((step, index) => {
@@ -208,6 +207,33 @@ export default function PublicRegistration({ initialView = "login" }) {
   const [timer, setTimer] = useState(25);
 
   const otpInputsRef = useRef([]);
+  const loginOtpInputsRef = useRef([]);
+
+  function handleLoginOtpChange(index, value) {
+    const entered = value.replace(/\D/g, "").slice(0, 6);
+    setLoginForm((curr) => {
+      if (entered.length > 1) return { ...curr, otp: entered };
+      const digits = curr.otp.split("");
+      digits[index] = entered;
+      return { ...curr, otp: digits.join("").slice(0, 6) };
+    });
+    if (entered.length > 1) loginOtpInputsRef.current[Math.min(index + entered.length, 5)]?.focus();
+    else if (entered && index < 5) loginOtpInputsRef.current[index + 1]?.focus();
+  }
+
+  function handleLoginOtpKeyDown(index, event) {
+    if (event.key === "Backspace" && !loginForm.otp[index] && index > 0) {
+      loginOtpInputsRef.current[index - 1]?.focus();
+    }
+  }
+
+  function handleLoginOtpPaste(event) {
+    event.preventDefault();
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    setLoginForm((curr) => ({ ...curr, otp: pasted }));
+    loginOtpInputsRef.current[Math.min(pasted.length, 5)]?.focus();
+  }
 
   // Resend Timer Countdown
   useEffect(() => {
@@ -1322,28 +1348,44 @@ export default function PublicRegistration({ initialView = "login" }) {
         {view === "loginOtp" && (
           <div className="wf-auth-wrapper wf-auth-narrow">
             <section className="wf-auth-card wf-otp-box">
+              <OnboardingStepper
+                current={1}
+                steps={[
+                  { id: "login", label: "Sign In" },
+                  { id: "verify", label: "Verify" },
+                ]}
+              />
+
               <div className="wf-otp-phone-card">
                 <Smartphone size={36} />
               </div>
 
-              <h2 className="text-2xl font-bold text-slate-900">Verify Mobile Login</h2>
+              <h2 className="text-2xl font-bold text-slate-900">Verify Your Mobile Number</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {success || "Enter the 6-digit OTP for"} <strong>{loginForm.verifiedPhone}</strong>
+                {success || "Enter the 6-digit OTP for"} <strong>{loginForm.verifiedPhone}</strong>{" "}
+                <button type="button" onClick={() => setView("login")} className="text-emerald-600 font-semibold underline">
+                  Edit
+                </button>
               </p>
 
               <form onSubmit={handlePhoneLoginVerify}>
-                <div className="wf-form-group mt-6">
-                  <label className="wf-form-label">SMS verification code</label>
-                  <input
-                    aria-label="SMS verification code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    required
-                    value={loginForm.otp}
-                    onChange={(e) => setLoginForm((curr) => ({ ...curr, otp: e.target.value.replace(/\D/g, "") }))}
-                  />
+                <div className="wf-otp-inputs" onPaste={handleLoginOtpPaste}>
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <input
+                      key={index}
+                      ref={(element) => (loginOtpInputsRef.current[index] = element)}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete={index === 0 ? "one-time-code" : "off"}
+                      maxLength={1}
+                      required
+                      value={loginForm.otp[index] || ""}
+                      onChange={(event) => handleLoginOtpChange(index, event.target.value)}
+                      onKeyDown={(event) => handleLoginOtpKeyDown(index, event)}
+                      className="wf-otp-digit"
+                      aria-label={`Digit ${index + 1}`}
+                    />
+                  ))}
                 </div>
 
                 <div className="wf-resend-timer">
@@ -1368,6 +1410,11 @@ export default function PublicRegistration({ initialView = "login" }) {
                   <button type="button" onClick={() => setView("login")} className="wf-back-link">
                     <ArrowLeft size={16} /> Back to Login
                   </button>
+                </div>
+
+                <div className="wf-trust-badge">
+                  <ShieldCheck size={18} />
+                  <span>Your information is secure with us.</span>
                 </div>
               </form>
             </section>
