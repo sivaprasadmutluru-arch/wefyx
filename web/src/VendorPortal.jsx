@@ -59,6 +59,7 @@ export default function VendorPortal({ user, onLogout }) {
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
   const [selected, setSelected] = useState(null);
+  const [resolution,setResolution]=useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [quote, setQuote] = useState(null);
   const [files, setFiles] = useState([]);
@@ -182,6 +183,12 @@ export default function VendorPortal({ user, onLogout }) {
     }
   }
 
+  async function updateFulfillment(action){
+    if(!selected||busy)return;setBusy(true);setError("");
+    try{const updated=await send(`/requirements/${selected.id}/${action}`,"PATCH",action==="resolve"?{resolution:resolution.trim()}:{});setSelected(updated);setResolution("");await load();toast(action==="start"?"Work started.":"Resolution sent to the customer.")}
+    catch(err){setError(err.message||"Unable to update work.")}finally{setBusy(false)}
+  }
+
   async function submitQuote() {
     if (busy) return;
     if (!["ACCEPTED", "REVISION_REQUESTED"].includes(quote?.status)) {
@@ -231,13 +238,13 @@ export default function VendorPortal({ user, onLogout }) {
 
   const activeOrders = useMemo(() => {
     return orders.filter(
-      (r) => !["DECLINED", "REJECTED", "CLOSED", "RESOLVED"].includes(r.vendorQuote?.status)
+      (r) => !["CLOSED","RESOLVED"].includes(r.status)&&!["DECLINED", "REJECTED", "NOT_SELECTED"].includes(r.vendorQuote?.status)
     );
   }, [orders]);
 
   const historyOrders = useMemo(() => {
     return orders.filter((r) =>
-      ["DECLINED", "REJECTED", "CLOSED", "RESOLVED"].includes(r.vendorQuote?.status)
+      ["CLOSED","RESOLVED"].includes(r.status)||["DECLINED", "REJECTED", "NOT_SELECTED"].includes(r.vendorQuote?.status)
     );
   }, [orders]);
 
@@ -654,7 +661,7 @@ export default function VendorPortal({ user, onLogout }) {
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                     Vendor Quotation
                   </h4>
-                  <p className="mt-2 text-xs text-slate-600">Status: {label(state)}</p>
+                  <p className="mt-2 text-xs text-slate-600">Status: {label(state)}</p>{selected.vendorName?.toLowerCase()===user.email?.toLowerCase()&&<div className="my-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">{["AGREED_PRICING_RECORDED","VENDOR_ACCEPTED"].includes(selected.status)&&<button type="button" disabled={busy} onClick={()=>updateFulfillment("start")} className="rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white">Start work</button>}{selected.status==="IN_PROGRESS"&&<><label className="block text-sm font-bold" htmlFor="vendor-resolution">Work completed / resolution</label><textarea id="vendor-resolution" maxLength={4000} rows={3} className="my-3 w-full rounded-lg border p-3 text-sm" value={resolution} onChange={e=>setResolution(e.target.value)}/><button type="button" disabled={busy||!resolution.trim()} onClick={()=>updateFulfillment("resolve")} className="rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Mark work resolved</button></>}</div>}
                   {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
                   {state === "INVITED" && (
                     <div className="mt-3">

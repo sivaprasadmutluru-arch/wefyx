@@ -89,7 +89,7 @@ class UserIdentityTest {
 
     @Test void rejectsForeignMobileAndMissingPassword() throws Exception {
         mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
-            .content(json.writeValueAsString(registration("foreign@example.com", "+919876543210"))))
+            .content(json.writeValueAsString(registration("foreign@example.com", "+12025550123"))))
             .andExpect(status().isBadRequest());
         var payload = new java.util.HashMap<>(registration("no-password@example.com", "+971509876544"));
         payload.remove("password");

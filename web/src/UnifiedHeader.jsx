@@ -1,3 +1,4 @@
+import useCatalog from "./useCatalog";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -29,6 +30,7 @@ import {
 } from "lucide-react";
 import AIQuotationModal from "./AIQuotationModal";
 import SiteVisitModal from "./SiteVisitModal";
+import { CART_EVENT, cartCount as countCartItems, loadCart } from "./cart";
 
 export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,34 +41,30 @@ export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
   const [selectedLocation, setSelectedLocation] = useState("Dubai, UAE");
   const [showAiModal, setShowAiModal] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
-  const [liveCartCount, setLiveCartCount] = useState(cartCount ?? 0);
+  const [storedCartCount, setStoredCartCount] = useState(() => countCartItems(loadCart()));
+  const liveCartCount = typeof cartCount === "number" ? cartCount : storedCartCount;
   const [accountOpen, setAccountOpen] = useState(false);
-  const [sessionUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("wefyx-user") || "null"); } catch { return null; }
+  const [sessionUser, setSessionUser] = useState(() => {
+    try { return localStorage.getItem("wefyx-token") ? JSON.parse(localStorage.getItem("wefyx-user") || "null") : null; } catch { return null; }
   });
   const [profilePhoto, setProfilePhoto] = useState("");
+  useEffect(() => {
+    const expired=()=>setSessionUser(null);
+    window.addEventListener("wefyx-unauthorized",expired);
+    return ()=>window.removeEventListener("wefyx-unauthorized",expired);
+  }, []);
 
   const searchInputRef = useRef(null);
 
   useEffect(() => {
-    try {
-      const savedCart = JSON.parse(localStorage.getItem("wefyx-customer-cart") || "[]");
-      if (typeof cartCount !== "number" && savedCart.length > 0) {
-        setLiveCartCount(savedCart.reduce((sum, item) => sum + Number(item.quantity || 1), 0));
-      }
-    } catch {}
-  }, [cartCount]);
-
-  useEffect(() => {
-    const refresh = () => {
-      try {
-        const items = JSON.parse(localStorage.getItem("wefyx-customer-cart") || "[]");
-        if (typeof cartCount !== "number") setLiveCartCount(Array.isArray(items) ? items.reduce((sum, item) => sum + Number(item.quantity || 1), 0) : 0);
-      } catch { setLiveCartCount(0); }
+    const refresh = () => setStoredCartCount(countCartItems(loadCart()));
+    window.addEventListener(CART_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(CART_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
     };
-    window.addEventListener("wefyx-cart-changed", refresh);
-    return () => window.removeEventListener("wefyx-cart-changed", refresh);
-  }, [cartCount]);
+  }, []);
 
   useEffect(() => {
     if (!sessionUser || sessionUser.role !== "CUSTOMER") return;
@@ -88,7 +86,9 @@ export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
     }
   }, [searchOpen]);
 
+  const {products:catalog}=useCatalog();
   const allSearchable = [
+    ...catalog.map(product=>({title:product.name,cat:product.category,href:product.rentable?`/rent/${encodeURIComponent(product.code)}`:`/shop?q=${encodeURIComponent(product.name)}`,desc:product.specification||""})),
     { title: "Managed IT Services", cat: "Service", href: "/services", desc: "Proactive 24/7 IT management and endpoint maintenance" },
     { title: "Data Center Construction", cat: "Infrastructure", href: "/data-center", desc: "Tier III/IV server room design, cooling, and build" },
     { title: "IT Support & Helpdesk", cat: "Service", href: "/services#helpdesk", desc: "Remote and on-site certified engineering support" },
@@ -96,10 +96,9 @@ export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
     { title: "Cloud & Microsoft 365", cat: "Cloud", href: "/services#cloud", desc: "Azure, AWS, Microsoft 365 migration & tenant setup" },
     { title: "Cybersecurity Solutions", cat: "Security", href: "/services#cybersecurity", desc: "Next-gen firewalls, EDR, SOC monitoring, audits" },
     { title: "Annual Maintenance Contracts (AMC)", cat: "AMC", href: "/amc", desc: "Preventive maintenance, SLA guarantee, asset cover" },
-    { title: "Dell Latitude 5550 Laptop Rental", cat: "Rental", href: "/rent/dell-latitude-5550", desc: "Intel Core i7, 16GB RAM, Windows 11 Pro" },
     { title: "IT Equipment Rental", cat: "Rental", href: "/rent", desc: "Daily, monthly, and yearly business hardware rental" },
     { title: "Shop Electronics", cat: "Shop", href: "/shop", desc: "Enterprise laptops, servers, switches, CCTV cameras" },
-    { title: "Book an On-Site Engineer (AED 105)", cat: "Booking", href: "/book-support", desc: "Certified engineer visits your office/site in UAE" },
+    { title: "Book an On-Site Engineer", cat: "Booking", href: "/book-support", desc: "Certified engineer visits your office/site in UAE" },
     { title: "Business Solutions", cat: "Solution", href: "/solutions", desc: "Tailored IT stacks for Corporate, Healthcare, Hospitality" },
     { title: "Industries We Support", cat: "Industry", href: "/industries", desc: "12+ enterprise industry compliance solutions" },
     { title: "Customer Account", cat: "Account", href: "/account", desc: "Access orders, requirements, support tickets, and profile" }
@@ -194,11 +193,10 @@ export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
       desc: "Short-term & long-term rentals for businesses, remote teams, and events.",
       link: "/rent",
       items: [
-        { title: "Corporate Laptop Rental", desc: "Dell Latitude, MacBook, ThinkPad fleets", href: "/rent?cat=Laptop", icon: Laptop },
+        { title: "Corporate Laptop Rental", desc: "Available laptops for your team", href: "/rent?cat=Laptop", icon: Laptop },
         { title: "Desktop & Workstation Rental", desc: "High-spec CAD and office workstations", href: "/rent?cat=Desktop", icon: Monitor },
         { title: "Server & Network Rental", desc: "Temporary rack servers & high-speed Wi-Fi", href: "/rent?cat=Servers", icon: Server },
         { title: "Event & Exhibition Tech", desc: "Displays, sound, projectors & badge printers", href: "/rent?cat=Event", icon: Zap },
-        { title: "Dell Latitude 5550 Feature", desc: "Core i7 / 16GB / 512GB - AED 199/mo", href: "/rent/dell-latitude-5550", icon: Laptop }
       ],
       featured: {
         title: "Zero Upfront Capital",
@@ -521,7 +519,7 @@ export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
                 className="flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800"
               >
                 <Wrench size={13} />
-                <span>Book Site Visit (AED 105)</span>
+                <span>Book Site Visit</span>
               </a>
               <span className="text-slate-300">|</span>
               <a href="tel:+97141234567" className="font-semibold text-slate-600 hover:text-slate-900">
@@ -562,7 +560,7 @@ export default function UnifiedHeader({ cartCount, onOpenQuote, onOpenVisit }) {
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 py-2 text-xs font-bold text-emerald-800"
               >
-                <Wrench size={14} /> Site Visit (AED 105)
+                <Wrench size={14} /> Site Visit
               </a>
             </div>
 

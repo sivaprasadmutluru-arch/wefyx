@@ -1,3 +1,4 @@
+import ServiceCatalogPage from "./ServiceCatalogPage";
 import { AuthVisual, Brand } from "./WefyxUI";
 import BookingFlow from "./BookingFlow";
 import ServiceTickets from "./ServiceTickets";
@@ -96,6 +97,7 @@ import SolutionsPage from "./SolutionsPage";
 import IndustriesPage from "./IndustriesPage";
 import ShopPage from "./ShopPage";
 import ProductManagementPage from "./ProductManagementPage";
+import OffersPage from "./OffersPage";
 const sections = [
   ["MAIN NAVIGATION", [["Dashboard", LayoutDashboard]]],
   [
@@ -123,6 +125,7 @@ const sections = [
     [
       ["Requirements & Quotes", ReceiptText],
       ["Orders", ShoppingCart],
+      ["Service Catalog", Boxes],
       ["Tickets", Ticket],
       ["Technicians", Headphones],
       ["Contracts (AMC)", FileClock],
@@ -137,6 +140,7 @@ const sections = [
     [
       ["Vendors", Store],
       ["Products & Services", Boxes],
+      ["Offers & Promo Codes", ReceiptText],
       ["Purchase & RFQ", ShoppingCart],
       ["Vendor Settlements", ReceiptText],
     ],
@@ -176,6 +180,7 @@ const adminPageSlugs = {
   "Teams": "teams",
   "Requirements & Quotes": "requirements",
   "Orders": "orders",
+  "Service Catalog": "service-catalog",
   "Tickets": "tickets",
   "Technicians": "technicians",
   "Contracts (AMC)": "contracts",
@@ -185,6 +190,7 @@ const adminPageSlugs = {
   "NOC Monitoring": "noc-monitoring",
   "Vendors": "vendors",
   "Products & Services": "products-services",
+  "Offers & Promo Codes": "offers",
   "Purchase & RFQ": "purchase-rfq",
   "Vendor Settlements": "vendor-settlements",
   "Invoices & Billing": "invoices-billing",
@@ -2137,14 +2143,7 @@ const moduleMeta = {
     entity: "Asset",
     action: "Add Asset",
     columns: ["Asset", "Category", "Assigned To", "Condition"],
-    items: [
-      "Dell Latitude 7450",
-      "Cisco Catalyst 9300",
-      "HP LaserJet Pro",
-      "MacBook Pro M4",
-      "FortiGate 100F",
-      "Synology RS1221+",
-    ],
+    items: [],
   },
   "Asset Rental": {
     entity: "Rental",
@@ -2202,14 +2201,7 @@ const moduleMeta = {
     entity: "Product",
     action: "Add Product",
     columns: ["Product / Service", "Category", "Vendor", "Unit Price"],
-    items: [
-      "Managed IT Support",
-      "Network Assessment",
-      "Endpoint Protection",
-      "Cloud Backup",
-      "Server Maintenance",
-      "NOC Monitoring",
-    ],
+    items: [],
   },
   "Purchase & RFQ": {
     entity: "RFQ",
@@ -2546,19 +2538,19 @@ function AdminLogin() {
   const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[show,setShow]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState("");
   async function submit(event){
     event.preventDefault();setError("");
-    if(!/^\S+@\S+\.\S+$/.test(email.trim())||password.length<8){setError("Enter admin email and password.");return}
+    if(!/^\S+@\S+\.\S+$/.test(email.trim())||password.length<8){setError("Enter your work email and password.");return}
     setLoading(true);
     try{
       const result=await login(email.trim(),password);
-      if(result.user?.role!=="SUPER_ADMIN")throw new Error("This login is for administrators only.");
+      if(!["SUPER_ADMIN","EMPLOYEE","VENDOR"].includes(result.user?.role))throw new Error("Please use the website login for your account.");
       localStorage.setItem("wefyx-admin-token",result.token);
       localStorage.setItem("wefyx-admin-auth","true");
       localStorage.setItem("wefyx-admin-user",JSON.stringify(result.user));
-      window.location.assign("/admin");
+      window.location.assign(result.user.role === "SUPER_ADMIN" ? "/admin" : "/admin/portal");
     }catch(requestError){setError(requestError.message||"Unable to sign in as admin.")}
     finally{setLoading(false)}
   }
-  return <div className="wf-auth wf-auth-login"><AuthVisual login/><section className="flex min-h-[calc(100vh-24px)] items-center justify-center px-1 py-4 lg:min-h-0 lg:justify-end lg:pl-10 lg:pr-3 xl:pl-14 xl:pr-4"><div className="w-full max-w-[500px] rounded-[26px] bg-white p-6 shadow-2xl shadow-black/20 sm:p-8 lg:min-h-[520px] lg:p-7"><div className="wf-form-brand"><Brand/></div><div className="mb-6"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-emerald-700">Admin console</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Admin Login</h1><p className="mt-2 text-sm leading-6 text-slate-500">Separate administrator access for Wefyx operations. Customer sessions stay on the website account area.</p></div><form onSubmit={submit} className="space-y-4"><LoginField label="Admin email" icon={Mail}><input value={email} onChange={event=>setEmail(event.target.value)} type="email" autoComplete="username" className="w-full bg-transparent text-sm outline-none" placeholder="admin@wefyx.pro"/></LoginField><div><label className="mb-2 block text-xs font-semibold">Password</label><div className="flex h-12 items-center gap-3 rounded-xl border bg-white px-4 focus-within:border-brand focus-within:ring-4 focus-within:ring-emerald-50"><LockKeyhole size={18} className="text-slate-400"/><input value={password} onChange={event=>setPassword(event.target.value)} type={show?"text":"password"} autoComplete="current-password" className="w-full bg-transparent text-sm outline-none"/><button type="button" aria-label={show?"Hide password":"Show password"} onClick={()=>setShow(!show)} className="text-slate-400">{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></div><div className={`flex min-h-9 items-center rounded-lg px-3 text-[11px] ${error?"bg-red-50 text-red-600":"invisible"}`} role="alert">{error||"No admin login error"}</div><button disabled={loading} className="flex h-12 w-full items-center justify-center rounded-xl bg-[#008553] text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:bg-[#007548] disabled:opacity-70">{loading?<span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"/>:"Open Admin Console  →"}</button></form><div className="mt-5 flex items-center justify-between text-xs"><a href="/" className="font-semibold text-slate-500 hover:text-emerald-700">Website</a><a href="/login" className="font-semibold text-slate-500 hover:text-emerald-700">Customer login</a></div></div></section></div>
+  return <div className="wf-auth wf-auth-login"><AuthVisual login/><section className="flex min-h-[calc(100vh-24px)] items-center justify-center px-1 py-4 lg:min-h-0 lg:justify-end lg:pl-10 lg:pr-3 xl:pl-14 xl:pr-4"><div className="w-full max-w-[500px] rounded-[26px] bg-white p-6 shadow-2xl shadow-black/20 sm:p-8 lg:min-h-[520px] lg:p-7"><div className="wf-form-brand"><Brand/></div><div className="mb-6"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-emerald-700">Admin console</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Admin Login</h1><p className="mt-2 text-sm leading-6 text-slate-500">Sign in as an administrator, employee or vendor to access your workspace.</p></div><form onSubmit={submit} className="space-y-4"><LoginField label="Work email" icon={Mail}><input value={email} onChange={event=>setEmail(event.target.value)} type="email" autoComplete="username" className="w-full bg-transparent text-sm outline-none" placeholder="admin@wefyx.pro"/></LoginField><div><label className="mb-2 block text-xs font-semibold">Password</label><div className="flex h-12 items-center gap-3 rounded-xl border bg-white px-4 focus-within:border-brand focus-within:ring-4 focus-within:ring-emerald-50"><LockKeyhole size={18} className="text-slate-400"/><input value={password} onChange={event=>setPassword(event.target.value)} type={show?"text":"password"} autoComplete="current-password" className="w-full bg-transparent text-sm outline-none"/><button type="button" aria-label={show?"Hide password":"Show password"} onClick={()=>setShow(!show)} className="text-slate-400">{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></div><div className={`flex min-h-9 items-center rounded-lg px-3 text-[11px] ${error?"bg-red-50 text-red-600":"invisible"}`} role="alert">{error||"No admin login error"}</div><button disabled={loading} className="flex h-12 w-full items-center justify-center rounded-xl bg-[#008553] text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:bg-[#007548] disabled:opacity-70">{loading?<span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"/>:"Sign In  →"}</button></form><div className="mt-5 flex items-center justify-between text-xs"><a href="/" className="font-semibold text-slate-500 hover:text-emerald-700">Website</a><a href="/login" className="font-semibold text-slate-500 hover:text-emerald-700">Customer login</a></div></div></section></div>
 }
 function AuthenticatedApp({ initialRegister = false, adminOnly = false }) {
   const authKey=adminOnly?"wefyx-admin-auth":"wefyx-auth";
@@ -2596,7 +2588,7 @@ function AuthenticatedApp({ initialRegister = false, adminOnly = false }) {
     setAuthenticated(false);
   }
   const signedInUser = JSON.parse(localStorage.getItem(userKey) || "null");
-  if(adminOnly&&signedInUser?.role!=="SUPER_ADMIN"){logout();return <AdminLogin/>}
+  if(adminOnly&&!["SUPER_ADMIN","EMPLOYEE","VENDOR"].includes(signedInUser?.role)){logout();return <AdminLogin/>}
   if (signedInUser?.role === "EMPLOYEE") return <EmployeePortal user={signedInUser} onLogout={logout} />;
   if (signedInUser?.role === "VENDOR") return <VendorPortal user={signedInUser} onLogout={logout} />;
   if (signedInUser?.role === "CUSTOMER") { window.location.assign("/account"); return null; }
@@ -2605,7 +2597,7 @@ function AuthenticatedApp({ initialRegister = false, adminOnly = false }) {
     page === "Dashboard" ? (
       <Dashboard />
     ) : page === "Users Management" ? (
-      <><EmployeeApprovals /><DynamicUsersPage /></>
+      <><EmployeeApprovals /><EmployeeApprovals registrationType="vendor" /><DynamicUsersPage /></>
     ) : page === "Role Management" ? (
       <DynamicRolesPage />
     ) : page === "Permissions" ? (
@@ -2626,6 +2618,10 @@ function AuthenticatedApp({ initialRegister = false, adminOnly = false }) {
       <RequirementsPage />
     ) : page === "Orders" ? (
       <AdminOrdersPage />
+    ) : page === "Service Catalog" ? (
+      <ServiceCatalogPage />
+    ) : page === "Offers & Promo Codes" ? (
+      <OffersPage />
     ) : page === "Products & Services" ? (
       <ProductManagementPage />
     ) : page === "My Profile" ? (
@@ -2692,15 +2688,15 @@ export default function App() {
   if (path === "/refund-policy") return <TrustPolicyPage type="refund" />;
   if (path === "/admin/login") return <AdminLogin />;
   if (path === "/admin" || path.startsWith("/admin/")) return <AuthenticatedApp adminOnly />;
-  if (path === "/portal") { window.location.assign("/admin/login"); return null; }
+  if (path === "/portal") { window.location.replace("/admin/portal"); return null; }
   if (path === "/account" || path.startsWith("/account/")) return <CustomerAccount />;
   if (path === "/register" || path === "/signup" || path === "/join") return <PublicRegistration initialView="signup" />;
   if (path === "/login" || path === "/signin") return <PublicRegistration initialView="login" />;
   if (path === "/forgot-password" || path === "/reset-password") return <PublicRegistration initialView="forgot" />;
-  if (path === "/careers") return <CareersPage />;
-  if (path === "/become-a-vendor") return <VendorRegistrationPage />;
+  if ((path === "/careers" || path === "/register/employee")) return <CareersPage />;
+  if ((path === "/become-a-vendor" || path === "/register/vendor")) return <VendorRegistrationPage />;
   if (path === "/rent") return <RentalCatalog />;
-  if (path === "/rent/dell-latitude-5550") return <RentalDetail />;
+  if (/^\/rent\/[^/]+$/.test(path)) return <RentalDetail />;
   if (path === "/cart") return <CartPage />;
   if (path === "/services") return <InfoPage type="services" />;
   if (path === "/data-center") return <DataCenterPage />;

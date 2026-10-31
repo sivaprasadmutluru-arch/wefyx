@@ -370,6 +370,13 @@ export default function ServiceWebsite() {
         onOpenVisit={() => setShowVisitModal(true)}
       />
 
+      <nav aria-label="Employee and vendor registration" className="border-b border-emerald-100 bg-emerald-50">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-end gap-x-6 gap-y-2 px-4 py-3 text-sm sm:px-6 lg:px-8">
+          <span className="text-emerald-900">Join Wefyx</span>
+          <a href="/register/employee" className="font-semibold text-emerald-800 hover:underline">Employee Registration</a>
+          <a href="/register/vendor" className="font-semibold text-emerald-800 hover:underline">Vendor Registration</a>
+        </div>
+      </nav>
       <main id="main-content">
         {/* 2. Hero Section with 5-Slide Slider (Slide 1 visually dominant with dark glass panel) */}
         <HeroSlider
@@ -434,7 +441,7 @@ export default function ServiceWebsite() {
                     onClick={() => setShowVisitModal(true)}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 py-3.5 text-xs font-bold text-white backdrop-blur transition hover:bg-white/20"
                   >
-                    <span>Book Site Survey (AED 105)</span>
+                    <span>Book Site Survey</span>
                   </button>
                 </div>
               </div>
@@ -944,13 +951,13 @@ export default function ServiceWebsite() {
                   Need an IT Expert at Your Office?
                 </h3>
                 <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                  Book a site visit with our certified engineer for just <strong>AED 100</strong> (+ 5% VAT = <strong>AED 105</strong>). Get professional advice, physical inspection, network testing, and a detailed recommendation report.
+                  Book a site visit with our certified engineer. Review the current fee including VAT before payment. Get professional advice, physical inspection, network testing, and a detailed recommendation report.
                 </p>
 
                 <div className="mt-6 flex items-center justify-between border-t border-emerald-200/60 pt-4">
                   <div>
                     <div className="text-[10px] text-slate-500">Inspection Fee:</div>
-                    <div className="text-xl font-black text-emerald-800">AED 105 <span className="text-[10px] font-normal text-slate-500">(incl. VAT)</span></div>
+                    <div className="text-xl font-black text-emerald-800">{catalog?.services?.find(service=>service.code==="SITE_VISIT")?`AED ${Number(catalog.services.find(service=>service.code==="SITE_VISIT").amount).toFixed(2)}`:"View current fees"} <span className="text-[10px] font-normal text-slate-500">(incl. VAT)</span></div>
                   </div>
                   <button
                     type="button"

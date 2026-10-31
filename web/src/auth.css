@@ -168,6 +168,8 @@
 .wf-auth-body {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  gap: 24px;
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
@@ -887,6 +889,11 @@
   letter-spacing: 0.2px;
 }
 
+.wf-phone-wrapper input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .wf-input-with-icon {
   position: relative;
   display: flex;
@@ -1557,3 +1564,30 @@
     display: none;
   }
 }
+
+.wf-registration-roles { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px 20px; width:100%; max-width:1080px; margin:0 auto; flex-shrink:0; font-size:14px; color:#426354; }
+.wf-registration-roles a { color:#16804e; font-weight:600; padding:8px 4px; }
+.wf-registration-roles a[aria-current="page"] { border-bottom:2px solid #16804e; }
+
+.wf-auth-split > * { min-width: 0; }
+.wf-tab-btn { white-space: nowrap; }
+.wf-registration-intro { margin-bottom: 20px; }
+.wf-registration-intro h2 { font-size: 24px; font-weight: 700; line-height: 1.3; }
+.wf-registration-intro p { font-size: 14px; line-height: 1.6; margin-top: 8px; color: #426354; }
+@media (max-width: 640px) {
+  .wf-auth-body { padding: 24px 12px; gap: 20px; }
+  .wf-registration-roles { gap: 4px 16px; }
+  .wf-registration-roles > span { flex-basis: 100%; text-align: center; }
+  .wf-registration-roles a { font-size: 13px; }
+  .wf-signup-reference .wf-brand-side { display: none; }
+  .wf-signup-reference { padding: 0; background: none; overflow: visible; }
+  .wf-auth-split { gap: 0; }
+}
+
+.wf-registration-options { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e1ece6; text-align: center; }
+.wf-registration-options p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: #648b7b; }
+.wf-registration-options > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 20px; }
+.wf-registration-options a { font-size: 14px; line-height: 1.5; font-weight: 600; color: #16804e; text-decoration: none; }
+.wf-registration-options a:hover { text-decoration: underline; }
+.wf-registration-options a[aria-current="page"] { color: #426354; }
+.wf-registration-options .wf-main-signup-link { display: inline-block; margin-top: 14px; }

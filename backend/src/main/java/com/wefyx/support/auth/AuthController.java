@@ -72,15 +72,33 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request){
+        return authenticate(request, false, false);
+    }
+
+    @PostMapping("/customer/login")
+    public ResponseEntity<?> customerLogin(@RequestBody LoginRequest request) {
+        return authenticate(request, true, false);
+    }
+
+    @PostMapping("/staff/login")
+    public ResponseEntity<?> staffLogin(@RequestBody LoginRequest request) {
+        return authenticate(request, false, true);
+    }
+
+    private ResponseEntity<?> authenticate(LoginRequest request, boolean customerOnly, boolean staffOnly) {
         String identifier=String.valueOf(request.email()!=null?request.email():request.phone()!=null?request.phone():"").trim();
         String suppliedPassword=String.valueOf(request.password());
 
         if (request.password() == null || request.password().isBlank())
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Email/mobile and password are required."));
-        if(matches(adminEmail,adminPassword,identifier,suppliedPassword))
+        if(matches(adminEmail,adminPassword,identifier,suppliedPassword)) {
+            requireLoginArea("SUPER_ADMIN", customerOnly, staffOnly);
             return session(adminEmail,"System Administrator","SUPER_ADMIN");
-        if(!vendorEmail.isBlank() && !vendorPassword.isBlank() && matches(vendorEmail,vendorPassword,identifier,suppliedPassword))
+        }
+        if(!vendorEmail.isBlank() && !vendorPassword.isBlank() && matches(vendorEmail,vendorPassword,identifier,suppliedPassword)) {
+            requireLoginArea("VENDOR", customerOnly, staffOnly);
             return session(vendorEmail,vendorName,"VENDOR");
+        }
 
         String normalizedIdentifier = identifier;
         if (!identifier.contains("@")) {
@@ -94,6 +112,7 @@ public class AuthController {
         if(user!=null) {
             boolean validPassword = user.getPasswordHash()!=null && passwords.matches(suppliedPassword,user.getPasswordHash());
             if(validPassword) {
+                requireLoginArea(loginRole(user.getRole()), customerOnly, staffOnly);
                 if(!identifier.contains("@"))
                     return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).body(Map.of("message","Mobile login requires SMS verification."));
                 if(user.getStatus()==UserStatus.PENDING) {
@@ -107,6 +126,27 @@ public class AuthController {
             }
         }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message","Invalid credentials. Please check your role, email/phone, and password."));
+    }
+
+    private void requireLoginArea(String role, boolean customerOnly, boolean staffOnly) {
+        if (customerOnly && !"CUSTOMER".equals(role))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Employees and vendors must use Admin Login at /admin/login.");
+        if (staffOnly && !java.util.Set.of("SUPER_ADMIN", "EMPLOYEE", "VENDOR").contains(role))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Please use the website login for your account.");
+    }
+
+    @PostMapping("/customer/login/send-otp")
+    public Map<String, Object> sendCustomerLoginOtp(@RequestBody LoginRequest request) {
+        var user = requirePhoneUser(request == null ? null : request.phone());
+        requireLoginArea(loginRole(user.getRole()), true, false);
+        return sendLoginOtp(request);
+    }
+
+    @PostMapping("/customer/login/verify")
+    public ResponseEntity<?> verifyCustomerPhoneLogin(@RequestBody PhoneLoginRequest request) {
+        var user = requirePhoneUser(request == null ? null : request.phone());
+        requireLoginArea(loginRole(user.getRole()), true, false);
+        return verifyPhoneLogin(request);
     }
 
     @PostMapping("/login/send-otp")

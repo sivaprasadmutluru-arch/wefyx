@@ -11,10 +11,11 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
 class OtpServiceTest {
-    @Test void normalizesUaeNumbersAndRejectsInvalidNumbers() {
+    @Test void normalizesUaeAndIndiaNumbersAndRejectsInvalidNumbers() {
         assertEquals("+971502234567", OtpService.normalize("+971 50 223 4567"));
         assertEquals("+971501234567", OtpService.normalize("00971 (50) 123-4567"));
-        for (String phone : new String[]{"+919876543210", "9876543210", "+915123456789", "+97141234567", "+9715022345600", "+12025550123"})
+        assertEquals("+919876543210", OtpService.normalize("0091 98765 43210"));
+        for (String phone : new String[]{"+12025550123", "9876543210", "+915123456789", "+97141234567", "+9715022345600", "+12025550123"})
             assertThrows(ResponseStatusException.class, () -> OtpService.normalize(phone));
     }
 

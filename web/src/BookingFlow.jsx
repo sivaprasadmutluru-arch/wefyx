@@ -75,15 +75,11 @@ function readDraft() {
     draft = emptyForm();
   }
   const type = new URLSearchParams(window.location.search).get("type");
-  if (["SITE_VISIT", "REMOTE", "GENERAL"].includes(type)) draft.supportType = type;
+  if (type&&/^[A-Z][A-Z0-9_]{1,39}$/.test(type)) draft.supportType = type;
+  if(draft.date<today()){draft.date=today();draft.time="";}
+  if(!/^\d{2}:\d{2}$/.test(draft.time))draft.time="";
   return draft;
 }
-
-const supportOptions = [
-  ["SITE_VISIT", UserRound, "Our engineer will visit your office/site.", "AED 100"],
-  ["REMOTE", MonitorCheck, "Get instant remote assistance.", "AED 100"],
-  ["GENERAL", Wrench, "Software, hardware, network, email, printer etc.", "AED 100"]
-];
 
 export default function BookingFlow() {
   const [path, navigate] = useRoute();
@@ -116,7 +112,7 @@ export default function BookingFlow() {
     try {
       setCatalog(await get("/bookings/catalog"));
     } catch (e) {
-      setCatalog({ amount: 100, currency: "AED" });
+      setCatalog(null);setCatalogError(e.message||"Unable to load service details. Please retry.");
     } finally {
       setCatalogLoading(false);
     }
@@ -163,10 +159,13 @@ export default function BookingFlow() {
       }));
   }, [user]);
 
-  const update = (key) => (event) =>
-    setForm((current) => ({ ...current, [key]: event.target.value }));
+  function changeForm(patch){setSaved(null);setUploaded(false);setForm(current=>({...current,...patch,requestKey:crypto.randomUUID()}))}
+  const update = (key) => (event) => changeForm({[key]:event.target.value});
 
+  const selectedService=catalog?.services?.find(service=>service.code===form.supportType);
+  const supportOptions=(catalog?.services||[]).map(service=>[service.code,service.code==="REMOTE"?MonitorCheck:service.code==="SITE_VISIT"?UserRound:Wrench,service.description,money(service.amount),service.name]);
   const detailsValid =
+    selectedService&&
     form.company.trim() &&
     form.contactName.trim() &&
     /^\S+@\S+\.\S+$/.test(form.contactEmail) &&
@@ -208,25 +207,14 @@ export default function BookingFlow() {
     setError("");
 
     try {
-      let booking;
-      try {
-        booking = saved || (await send("/bookings", "POST", form));
-      } catch (err) {
-        booking = {
-          id: `wfx-${Date.now()}`,
-          reference: `WFX-${Date.now()}`,
-          status: "ASSIGNED",
-          ...form
-        };
-      }
-
+      if(!user||user.role!=="CUSTOMER")throw new Error("Sign in with a customer account to submit a service request.");
+      const booking=saved||(await send("/bookings","POST",form));
       setSaved(booking);
       if (!uploaded && files.length) {
-        try {
-          await uploadFiles(`/bookings/${booking.id}/files`, files);
-        } catch {}
+        await uploadFiles(`/bookings/${booking.id}/files`, files);
       }
       setUploaded(true);
+      if(catalog?.checkoutAvailable){const checkout=await send(`/bookings/${booking.id}/checkout`,"POST",{});if(checkout.checkoutUrl){window.location.assign(checkout.checkoutUrl);return}}
       sessionStorage.removeItem(DRAFT_KEY);
       await clearDraftFiles(DRAFT_KEY).catch(() => {});
 
@@ -239,11 +227,13 @@ export default function BookingFlow() {
     }
   }
 
-  if (step === 3) return <BookingConfirmation fallbackForm={form} />;
+  if (step === 3) return <BookingConfirmation />;
+  if(step===2&&sessionLoading)return <BookingLayout><p>Checking your account…</p></BookingLayout>;
+  if(step===2&&!user)return <BookingLayout><SignIn returnTo="/book-support/payment"/></BookingLayout>;
 
   return (
     <BookingLayout step={step}>
-      <ErrorMessage>{error}</ErrorMessage>
+      <ErrorMessage>{error||catalogError}</ErrorMessage>{catalogLoading&&<p role="status">Loading services…</p>}{!catalogLoading&&catalog?.services?.length===0&&<p>No services available for new bookings.</p>}
 
       {/* Step 1: 1. Select Support Type + 2. Provide Details */}
       {step === 0 && (
@@ -259,7 +249,7 @@ export default function BookingFlow() {
             1. Select Support Type
           </Heading>
           <div className="bk-service-options">
-            {supportOptions.map(([value, Icon, description, prc]) => {
+            {supportOptions.map(([value, Icon, description, prc, name]) => {
               const isSelected = form.supportType === value;
               return (
                 <label
@@ -282,9 +272,9 @@ export default function BookingFlow() {
                       <Check size={16} />
                     </span>
                   )}
-                  <b>{supportNames[value]}</b>
+                  <b>{name}</b>
                   <small>{description}</small>
-                  <strong className="bk-card-price">{prc}</strong>
+                  <strong className="bk-card-price">{prc} <small>including VAT</small></strong>
                 </label>
               );
             })}
@@ -433,6 +423,9 @@ export default function BookingFlow() {
           onSubmit={(event) => {
             event.preventDefault();
             if (!form.time) return setError("Select an available time slot.");
+            const address=companyAddress?profileAddress:form.address;
+            if(!address.trim())return setError("Enter the service address.");
+            changeForm({address});
             navigate("/book-support/payment");
           }}
         >
@@ -440,12 +433,14 @@ export default function BookingFlow() {
             3. Select Date &amp; Time
           </Heading>
           <Schedule
+            supportType={form.supportType}
+            advanceDays={selectedService?.advanceDays||90}
             date={form.date}
             time={form.time}
             onDate={(date) =>
-              setForm((current) => ({ ...current, date, time: "" }))
+              changeForm({date,time:""})
             }
-            onTime={(time) => setForm((current) => ({ ...current, time }))}
+            onTime={(time) => changeForm({time})}
           />
 
           <Heading subtitle="Where should we provide support?">
@@ -490,7 +485,7 @@ export default function BookingFlow() {
             </label>
           </div>
 
-          {!companyAddress && (
+          {(!companyAddress||!profileAddress) && (
             <div className="bk-fields mb-6">
               <Field label="Country">
                 <input value="United Arab Emirates" readOnly />
@@ -526,7 +521,7 @@ export default function BookingFlow() {
 
           <div className="bk-actions">
             <Back onClick={() => navigate("/book-support")} />
-            <Primary type="submit">Next: Payment</Primary>
+            <Primary type="submit">Next: Review</Primary>
           </div>
         </form>
       )}
@@ -534,342 +529,36 @@ export default function BookingFlow() {
       {/* Step 3: 4. Service Fee Payment */}
       {step === 2 && (
         <form onSubmit={handleConfirmPayment}>
-          <Heading subtitle="Complete your payment to confirm the booking.">
-            4. Service Fee Payment
-          </Heading>
-
-          {/* Itemized Receipt Table Matching Image 2 */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs mb-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-slate-900 text-sm">
-                Support Service ({supportNames[form.supportType] || "Site Visit"})
-              </span>
-              <strong className="text-emerald-700 text-base font-extrabold">
-                AED 100
-              </strong>
-            </div>
-
-            <div className="mt-4 space-y-2 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Service Type</span>
-                <span className="font-semibold text-slate-800">
-                  {supportNames[form.supportType]}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Date &amp; Time</span>
-                <span className="font-semibold text-slate-800">
-                  {form.date}, {form.time}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Company</span>
-                <span className="font-semibold text-slate-800">
-                  {form.company}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Contact Person</span>
-                <span className="font-semibold text-slate-800">
-                  {form.contactName}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Issue Category</span>
-                <span className="font-semibold text-slate-800">
-                  {form.category}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Subject</span>
-                <span className="font-semibold text-slate-800">
-                  {form.subject}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between border-t border-slate-200/80 pt-3">
-              <span className="font-bold text-slate-900 text-sm">
-                Total Amount
-              </span>
-              <strong className="text-xl font-black text-emerald-700">
-                AED 100
-              </strong>
-            </div>
-          </div>
-
-          {/* Payment Method Selection */}
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
-            Select Payment Method
-          </h3>
-          <div className="space-y-2 mb-6">
-            <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3.5 cursor-pointer hover:border-emerald-500 hover:bg-slate-50 transition">
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio"
-                  name="payMethod"
-                  value="card"
-                  checked={paymentMethod === "card"}
-                  onChange={() => setPaymentMethod("card")}
-                  className="accent-emerald-600"
-                />
-                <span className="text-xs font-bold text-slate-800">
-                  Credit / Debit Card
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-400 font-bold text-[10px]">
-                <span className="text-emerald-600 font-black">VISA</span>
-                <span className="text-red-500 font-black">MC</span>
-                <span className="text-emerald-400 font-black">AMEX</span>
-              </div>
-            </label>
-
-            <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3.5 cursor-pointer hover:border-emerald-500 hover:bg-slate-50 transition">
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio"
-                  name="payMethod"
-                  value="apple"
-                  checked={paymentMethod === "apple"}
-                  onChange={() => setPaymentMethod("apple")}
-                  className="accent-emerald-600"
-                />
-                <span className="text-xs font-bold text-slate-800">
-                  Apple Pay
-                </span>
-              </div>
-              <span className="font-bold text-xs text-slate-900"> Pay</span>
-            </label>
-
-            <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3.5 cursor-pointer hover:border-emerald-500 hover:bg-slate-50 transition">
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio"
-                  name="payMethod"
-                  value="google"
-                  checked={paymentMethod === "google"}
-                  onChange={() => setPaymentMethod("google")}
-                  className="accent-emerald-600"
-                />
-                <span className="text-xs font-bold text-slate-800">
-                  Google Pay
-                </span>
-              </div>
-              <span className="font-bold text-xs text-slate-900">G Pay</span>
-            </label>
-          </div>
-
-          <div className="bk-actions">
-            <Back onClick={() => navigate("/book-support/schedule")} />
-            <Primary type="submit" disabled={busy}>
-              {busy ? "Processing…" : "Pay AED 100 and Confirm Booking"}
-            </Primary>
-          </div>
-          <p className="mt-4 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
-            <ShieldCheck size={14} className="text-emerald-600" />
-            <span>Secure Payment (SSL Encrypted)</span>
-          </p>
+          <Heading subtitle="Check your details before submitting your service request.">4. Review your request</Heading>
+          <Summary booking={{...form,serviceName:selectedService?.name}}/>
+          <div className="mt-6 rounded-xl border bg-white p-5 text-sm"><b>Service fee: {money(saved?.amount??selectedService?.amount??0)} including VAT</b><p className="mt-3 leading-6 text-slate-600">{catalog?.checkoutMessage||"Online payment is not available. Submitting saves your request; your appointment is not confirmed or reserved."}</p><p className="mt-2 text-slate-600">{catalog?.checkoutAvailable?"Your chosen slot is held for up to one hour while you complete secure payment.":"You can track the pending request in My Support Tickets."}</p></div>
+          <div className="bk-actions"><Back onClick={()=>navigate("/book-support/schedule")}/><Primary type="submit" disabled={busy||catalogLoading||!selectedService}>{busy?"Please wait…":catalog?.checkoutAvailable?"Continue to secure payment":"Submit service request"}</Primary></div>
         </form>
       )}
     </BookingLayout>
   );
 }
 
-function Schedule({ date, time, onDate, onTime }) {
-  const [month, setMonth] = useState(() => new Date("2025-09-01T12:00:00"));
-
-  const predefinedSlots = [
-    "09:00 AM - 10:00 AM",
-    "10:00 AM - 11:00 AM",
-    "11:00 AM - 12:00 PM",
-    "01:00 PM - 02:00 PM",
-    "02:00 PM - 03:00 PM",
-    "03:00 PM - 04:00 PM",
-    "04:00 PM - 05:00 PM"
-  ];
-
-  const year = month.getFullYear();
-  const index = month.getMonth();
-  const days = new Date(year, index + 1, 0).getDate();
-  const offset = new Date(year, index, 1).getDay();
-
-  function key(day) {
-    return `${year}-${String(index + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  }
-
-  return (
-    <div className="bk-schedule">
-      <section className="bk-calendar" aria-label="Choose a date">
-        <div className="flex items-center justify-between mb-4">
-          <button
-            type="button"
-            onClick={() => setMonth(new Date(year, index - 1, 1))}
-            className="p-1 hover:bg-slate-100 rounded"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <b className="text-xs font-bold text-slate-900">
-            {month.toLocaleDateString("en", { month: "long", year: "numeric" })}
-          </b>
-          <button
-            type="button"
-            onClick={() => setMonth(new Date(year, index + 1, 1))}
-            className="p-1 hover:bg-slate-100 rounded"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-        <div className="bk-calendar-grid">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-            <small key={day} className="text-[10px] text-slate-400 font-semibold">
-              {day}
-            </small>
-          ))}
-          {Array.from({ length: offset }, (_, i) => (
-            <span key={`empty-${i}`} />
-          ))}
-          {Array.from({ length: days }, (_, i) => i + 1).map((day) => {
-            const dayKey = key(day);
-            const isSelected = date === dayKey || (day === 12 && !date);
-            return (
-              <button
-                type="button"
-                key={day}
-                aria-pressed={isSelected}
-                onClick={() => onDate(dayKey)}
-                className={`text-xs p-2 rounded-full transition ${
-                  isSelected
-                    ? "bg-[#00a86b] text-white font-bold"
-                    : "hover:bg-emerald-50 text-slate-700"
-                }`}
-              >
-                {day}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="bk-slots">
-        <h3 className="text-xs font-bold text-slate-900">Available Time Slots</h3>
-        <p className="text-[11px] text-slate-500 mb-3">Friday, 12 Sep 2025</p>
-        <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-          {predefinedSlots.map((slot) => {
-            const isChosen = time === slot || (slot.startsWith("11:00") && !time);
-            return (
-              <label
-                key={slot}
-                className={`flex items-center gap-2.5 rounded-lg border p-2.5 text-xs cursor-pointer transition ${
-                  isChosen
-                    ? "border-emerald-600 bg-emerald-50/70 font-bold text-emerald-900"
-                    : "border-slate-200 text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="slotTime"
-                  value={slot}
-                  checked={isChosen}
-                  onChange={() => onTime(slot)}
-                  className="accent-emerald-600"
-                />
-                <span>{slot}</span>
-              </label>
-            );
-          })}
-        </div>
-      </section>
-    </div>
-  );
+function Schedule({date,time,onDate,onTime,supportType,advanceDays}){
+  const [month,setMonth]=useState(()=>new Date(`${date||today()}T12:00:00`));
+  const [slots,setSlots]=useState([]),[loading,setLoading]=useState(false),[error,setError]=useState(""),[retry,setRetry]=useState(0);
+  const max=new Date(`${today()}T12:00:00Z`);max.setUTCDate(max.getUTCDate()+advanceDays);const maxDate=max.toISOString().slice(0,10);
+  useEffect(()=>{let active=true;setLoading(true);setError("");setSlots([]);get(`/bookings/availability?date=${encodeURIComponent(date||today())}&supportType=${encodeURIComponent(supportType)}`).then(rows=>{if(active){setSlots(rows);if(time&&!rows.some(slot=>slot.time===time&&slot.available))onTime("")}}).catch(err=>{if(active)setError(err.message||"Unable to load available slots.")}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[date,retry,supportType]);
+  const year=month.getFullYear(),index=month.getMonth(),days=new Date(year,index+1,0).getDate(),offset=new Date(year,index,1).getDay();
+  const key=day=>`${year}-${String(index+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  return <div className="bk-schedule"><section className="bk-calendar" aria-label="Choose a date"><div className="mb-4 flex items-center justify-between"><button aria-label="Previous month" type="button" disabled={key(days)<today()||key(1)<=today().slice(0,7)+"-01"} onClick={()=>setMonth(new Date(year,index-1,1))}><ChevronLeft size={18}/></button><b>{month.toLocaleDateString("en",{month:"long",year:"numeric"})}</b><button aria-label="Next month" type="button" disabled={key(1).slice(0,7)>=maxDate.slice(0,7)} onClick={()=>setMonth(new Date(year,index+1,1))}><ChevronRight size={18}/></button></div><div className="bk-calendar-grid">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=><small key={day}>{day}</small>)}{Array.from({length:offset},(_,i)=><span key={`empty-${i}`}/>)}{Array.from({length:days},(_,i)=>i+1).map(day=><button type="button" key={day} disabled={key(day)<today()||key(day)>maxDate} aria-pressed={date===key(day)} onClick={()=>onDate(key(day))} className={`rounded-full p-2 text-sm disabled:opacity-30 ${date===key(day)?"bg-emerald-600 text-white":"hover:bg-emerald-50"}`}>{day}</button>)}</div></section><section className="bk-slots"><h3 className="font-bold">Available time slots</h3><p className="my-3 text-sm text-slate-500">{date} · UAE time</p>{loading?<p>Loading availability…</p>:error?<div role="alert"><p>{error}</p><button type="button" onClick={()=>setRetry(r=>r+1)}>Retry</button></div>:<div className="space-y-2">{slots.map(slot=><label key={slot.time} className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${slot.available?"cursor-pointer":"opacity-40"} ${time===slot.time?"border-emerald-600 bg-emerald-50":""}`}><input type="radio" name="slotTime" disabled={!slot.available} value={slot.time} checked={time===slot.time} onChange={()=>onTime(slot.time)}/>{slot.time} – {slot.endTime}{!slot.available&&" · Unavailable"}</label>)}{!slots.some(slot=>slot.available)&&<p>No appointments available on this date. Choose another date.</p>}</div>}</section></div>;
 }
 
-function BookingConfirmation({ fallbackForm }) {
-  const { user, loading } = useSession();
-  const [booking, setBooking] = useState(null);
-  const id = new URLSearchParams(window.location.search).get("id") || "";
-
-  useEffect(() => {
-    if (id) {
-      get(`/bookings/${encodeURIComponent(id)}`)
-        .then(setBooking)
-        .catch(() => {});
-    }
-  }, [id]);
-
-  const display = booking || {
-    reference: id || "Pending confirmation",
-    supportType: fallbackForm?.supportType || "SITE_VISIT",
-    date: fallbackForm?.date || today(),
-    time: fallbackForm?.time || "To be scheduled",
-    company: fallbackForm?.company || "Your company",
-    address: fallbackForm?.address || "Address to be confirmed",
-    status: "ASSIGNED"
-  };
-
-  return (
-    <BookingLayout step={3} narrow>
-      <div className="py-6 text-center">
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-emerald-600">
-          <CheckCircle2 size={40} />
-        </div>
-        <h2 className="mt-4 text-2xl font-black text-slate-900">
-          Your Support Service is Booked!
-        </h2>
-        <p className="mt-1 text-xs font-semibold text-emerald-700">
-          Booking ID: <span className="font-mono font-bold">{display.reference}</span>
-        </p>
-        <p className="mt-2 text-xs text-slate-500 max-w-md mx-auto">
-          We have received your request and an engineer has been assigned. You will receive updates via email and SMS.
-        </p>
-
-        {/* Itemized Summary Card Matching Image 2 */}
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-left text-xs shadow-sm max-w-md mx-auto">
-          <div className="space-y-2.5 text-slate-600">
-            <div className="flex justify-between border-b border-slate-100 pb-2">
-              <span className="text-slate-400">Service Type</span>
-              <span className="font-bold text-slate-800">
-                {supportNames[display.supportType] || "Site Visit Support"}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-100 pb-2">
-              <span className="text-slate-400">Date &amp; Time</span>
-              <span className="font-bold text-slate-800">
-                {display.date}, {display.time}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-100 pb-2">
-              <span className="text-slate-400">Company</span>
-              <span className="font-bold text-slate-800">{display.company}</span>
-            </div>
-            <div className="flex justify-between border-b border-slate-100 pb-2">
-              <span className="text-slate-400">Address</span>
-              <span className="font-bold text-slate-800">{display.address}</span>
-            </div>
-            <div className="flex justify-between pt-1">
-              <span className="text-slate-400">Status</span>
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                Assigned - In Progress
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 flex justify-center gap-3">
-          <a
-            href="/my-tickets"
-            className="inline-flex items-center gap-2 rounded-xl bg-[#00a86b] px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-500/20 hover:bg-[#008c59]"
-          >
-            <span>View My Tickets</span>
-            <ArrowRight size={14} />
-          </a>
-          <a
-            href="/"
-            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Go to Home
-          </a>
-        </div>
-      </div>
-    </BookingLayout>
-  );
+function BookingConfirmation(){
+  const {user,loading:sessionLoading}=useSession();
+  const [booking,setBooking]=useState(null),[error,setError]=useState(""),[loading,setLoading]=useState(true),[paymentAvailable,setPaymentAvailable]=useState(false);
+  useEffect(()=>{get("/bookings/catalog").then(catalog=>setPaymentAvailable(catalog.checkoutAvailable)).catch(()=>{})},[]);
+  const id=new URLSearchParams(window.location.search).get("id");
+  useEffect(()=>{if(sessionLoading)return;if(!user){setLoading(false);return}if(!id){setError("No service request was specified.");setLoading(false);return}let active=true;get(`/bookings/${encodeURIComponent(id)}`).then(async row=>{if(row.status==="AWAITING_PAYMENT"&&new URLSearchParams(window.location.search).has("session_id"))return send(`/bookings/${encodeURIComponent(id)}/verify-payment`,"POST",{});return row}).then(row=>{if(active)setBooking(row)}).catch(err=>{if(active)setError(err.message||"Unable to load this request.")}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[id,user,sessionLoading]);
+  if(sessionLoading||loading)return <BookingLayout narrow><p>Loading service request…</p></BookingLayout>;
+  if(!user)return <BookingLayout narrow><SignIn/></BookingLayout>;
+  if(!booking)return <BookingLayout narrow><ErrorMessage>{error||"Service request not found."}</ErrorMessage><a href="/my-tickets">View my requests</a></BookingLayout>;
+  const pending=booking.status==="AWAITING_PAYMENT";
+  async function resumePayment(){setError("");try{const result=await send(`/bookings/${booking.id}/checkout`,"POST",{});if(result.checkoutUrl)window.location.assign(result.checkoutUrl);else setBooking(await get(`/bookings/${booking.id}`))}catch(e){setError(e.message)}}
+  return <BookingLayout step={3} narrow><ErrorMessage>{error}</ErrorMessage><div className="py-6"><CheckCircle2 className="mx-auto text-emerald-600" size={40}/><h2 className="mt-4 text-center text-2xl font-bold">{pending?"Service request saved":"Service booking details"}</h2><p className="mt-2 text-center font-mono">{booking.reference}</p><p className="my-5 text-center text-sm text-slate-600">{pending?"Payment has not been verified yet. Your appointment is pending; check the payment status before trying again.":`Current status: ${booking.status.toLowerCase().replaceAll("_"," ")}.`}</p><Summary booking={booking}/>{pending&&paymentAvailable&&<button className="wh-button mt-5" onClick={resumePayment}>Pay / check payment</button>}<a className="wh-button mt-6" href={`/my-tickets/${booking.id}`}>Track my request <ArrowRight size={16}/></a></div></BookingLayout>;
 }

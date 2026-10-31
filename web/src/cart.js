@@ -24,7 +24,7 @@ export function addToCart(product) {
   const next = found
     ? items.map((item) =>
         `${item.id}:${item.mode || "RENT"}` === key
-          ? { ...item, quantity: Number(item.quantity || 1) + Number(product.quantity || 1), selected: true }
+          ? { ...item, ...product, quantity: Number(item.quantity || 1) + Number(product.quantity || 1), selected: true }
           : item,
       )
     : [...items, { quantity: 1, months: 1, rentalPeriod: "MONTH", rentalDuration: 1, startDate: new Date().toISOString().slice(0,10), selected: true, mode: "RENT", ...product }];

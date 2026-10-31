@@ -8,7 +8,7 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 RUN useradd --system --uid 10001 wefyx
-COPY --from=build /app/target/it-support-service-1.0.0.jar app.jar
+COPY --from=build /app/target/wefyx-platform-1.0.0.jar app.jar
 USER wefyx
 EXPOSE 8080
 ENTRYPOINT ["java","-jar","app.jar"]

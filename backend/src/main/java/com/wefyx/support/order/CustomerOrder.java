@@ -30,6 +30,10 @@ public class CustomerOrder {
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal total;
     @Column(nullable = false) private Integer itemCount;
     @Column(nullable = false, columnDefinition = "text") private String itemsJson;
+    @Column(length=40) private String promoCode;
+    @Column(precision=14,scale=2) private BigDecimal discountAmount=BigDecimal.ZERO;
+    public String getPromoCode(){return promoCode;} public void setPromoCode(String v){promoCode=v;}
+    public BigDecimal getDiscountAmount(){return discountAmount==null?BigDecimal.ZERO:discountAmount;} public void setDiscountAmount(BigDecimal v){discountAmount=v;}
     private boolean termsAccepted;
     private LocalDateTime termsAcceptedAt;
     @Column(length = 40) private String termsVersion;

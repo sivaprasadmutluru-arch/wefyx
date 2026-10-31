@@ -94,7 +94,7 @@ export default function HeroSlider({ onOpenQuote, onOpenVisit }) {
         { icon: Headphones, label: "24/7 Helpdesk", sub: "Always available engineers" },
         { icon: ShieldCheck, label: "Flat-Rate Pricing", sub: "No surprise invoices" }
       ],
-      primaryBtn: { text: "Book Site Visit (AED 105)", action: "visit" },
+      primaryBtn: { text: "Book Site Visit", action: "visit" },
       secondaryBtn: { text: "Talk to Support", href: "/contact" },
       image: "/images/home-support-hero.png",
       panelTitle: "ENTERPRISE SUPPORT CAPABILITIES",
@@ -153,11 +153,11 @@ export default function HeroSlider({ onOpenQuote, onOpenVisit }) {
       image: "/images/rental-hero-reference.png",
       panelTitle: "COMMERCIAL HARDWARE FLEETS",
       panelItems: [
-        "Dell Latitude & Apple MacBook",
+        "Business Laptops",
         "CAD & High-Spec Workstations",
         "Temporary Servers & Networking",
         "Event Displays & Projectors",
-        "Poly & Logitech Conference Kits",
+        "Video Conference Equipment",
         "Custom Corporate Bundles"
       ],
       footerText: "PRE-LOADED · DELIVERED · SUPPORTED"

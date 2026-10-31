@@ -11,6 +11,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByEmployeeEmailIgnoreCaseOrderByCreatedAtDesc(String email);
     List<Booking> findAllByOrderByCreatedAtDesc();
     Optional<Booking> findByRequestKey(String key);
+    List<Booking> findByDateAndOccupiedSlotIsNotNull(LocalDate date);
+    Optional<Booking> findByCheckoutSessionId(String sessionId);
+    List<Booking> findByDateAndStatusAndOccupiedSlotIsNotNull(LocalDate date,Booking.Status status);
     @Query("select b.time from Booking b where b.date = :date and b.occupiedSlot is not null")
     List<String> occupiedTimes(@Param("date") LocalDate date);
     @Lock(LockModeType.PESSIMISTIC_WRITE)

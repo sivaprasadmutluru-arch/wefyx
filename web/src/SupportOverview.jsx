@@ -15,11 +15,6 @@ export function SupportHero() {
   </section>;
 }
 
-const options = [
-  ["SITE_VISIT", UserRound, "Site Visit Support", "Our engineer will visit your office or site."],
-  ["REMOTE", MonitorCheck, "Remote Support", "Get expert assistance with your IT issues remotely."],
-  ["GENERAL", Wrench, "General IT Support", "Software, hardware, network, email and printer support."]
-];
 const steps = [
   [UserCheck, "Choose Service", "Select the support type you need."],
   [CreditCard, "Book & Pay", "Choose a time and confirm your payment."],
@@ -34,19 +29,12 @@ const benefits = [
 ];
 
 export default function SupportOverview() {
-  const [price, setPrice] = useState(null);
-  useEffect(() => {
-    let active = true;
-    get("/bookings/catalog").then(catalog => {
-      if (active && catalog.amount != null && Number.isFinite(Number(catalog.amount))) {
-        setPrice(`${catalog.currency || "AED"} ${Number(catalog.amount).toLocaleString("en-AE", { maximumFractionDigits: 2 })}`);
-      }
-    }).catch(() => {});
-    return () => { active = false; };
-  }, []);
+  const [services,setServices]=useState([]);
+  useEffect(()=>{let active=true;get("/bookings/catalog").then(catalog=>{if(active)setServices(catalog.services||[])}).catch(()=>{});return()=>{active=false}},[]);
+  const options=services.map(service=>[service.code,service.code==="REMOTE"?MonitorCheck:service.code==="SITE_VISIT"?UserRound:Wrench,service.name,service.description,`AED ${Number(service.amount).toFixed(2)} incl. VAT`]);
   return <section className="support-overview" aria-label="Book and track IT support">
     <div className="support-options">
-      {options.map(([type, Icon, title, description]) => <a className="support-option" href={`/book-support?type=${type}`} key={type}>
+      {options.map(([type, Icon, title, description, price]) => <a className="support-option" href={`/book-support?type=${type}`} key={type}>
         <span className="support-icon"><Icon size={26} aria-hidden="true" /></span>
         <h2>{title}</h2><p>{description}</p>
         <span className="support-link">{price ? `${price} · Book support` : "Book support"} <ArrowRight size={16} aria-hidden="true" /></span>

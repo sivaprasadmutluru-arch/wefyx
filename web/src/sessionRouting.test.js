@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { sessionDestination } from './sessionRouting.js';
+test('employee sign-in reaches the employee portal',()=>assert.equal(sessionDestination('EMPLOYEE'),'/admin/portal'));
+test('vendor sign-in reaches the vendor portal',()=>assert.equal(sessionDestination('VENDOR'),'/admin/portal'));
+test('customer sign-in reaches the account',()=>assert.equal(sessionDestination('CUSTOMER'),'/account'));
+test('customer sign-in preserves a cart return destination',()=>assert.equal(sessionDestination('CUSTOMER','/cart'),'/cart'));
+test('external return destinations are rejected',()=>assert.equal(sessionDestination('CUSTOMER','https://untrusted.example'),'/account'));
+test('protocol-relative return destinations are rejected',()=>assert.equal(sessionDestination('CUSTOMER','//untrusted.example'),'/account'));
+test('administrators retain the separate administrator login',()=>assert.equal(sessionDestination('SUPER_ADMIN'),'/admin/login'));

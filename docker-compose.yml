@@ -27,9 +27,18 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       JPA_DDL_AUTO: update
       CORS_ORIGINS: ${PUBLIC_URL}
+      PUBLIC_URL: ${PUBLIC_URL}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_SUCCESS_URL: ${PUBLIC_URL}/account/orders?payment=stripe_success
+      STRIPE_CANCEL_URL: ${PUBLIC_URL}/cart?payment=stripe_cancelled
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_VERIFY_SERVICE_SID: ${TWILIO_VERIFY_SERVICE_SID:-}
       SEED_DATA: ${SEED_DATA:-false}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
@@ -41,7 +50,10 @@ services:
       MAIL_STARTTLS: ${MAIL_STARTTLS:-true}
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
     restart: unless-stopped
     depends_on:
       - backend

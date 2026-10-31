@@ -169,12 +169,16 @@ export default function EmployeePortal({ user, onLogout }) {
   const handleStatusChange = async (reqId, newStatus) => {
     setBusy(true);
     try {
-      await send(`/requirements/${reqId}/status`, "PATCH", { status: newStatus });
+      const actions={ACCEPTED:"accept",UNDER_REVIEW:"review",IN_PROGRESS:"start",RESOLVED:"resolve",CLOSED:"close"};
+      if(!actions[newStatus])throw new Error("Use requirement details to invite a vendor.");
+      const body={employeeName:user.name};
+      if(newStatus==="RESOLVED"){const resolution=window.prompt("Describe the resolution");if(!resolution?.trim())return;body.resolution=resolution.trim();}
+      const updated=await send(`/requirements/${reqId}/${actions[newStatus]}`, "PATCH", body);
       setRequirements((prev) =>
-        prev.map((r) => (r.id === reqId ? { ...r, status: newStatus } : r))
+        prev.map((r) => (r.id === reqId ? updated : r))
       );
       if (selectedReq?.id === reqId) {
-        setSelectedReq((prev) => ({ ...prev, status: newStatus }));
+        setSelectedReq(updated);
       }
       showToast(`Status updated to ${readable(newStatus)}`);
     } catch (err) {
@@ -208,7 +212,7 @@ export default function EmployeePortal({ user, onLogout }) {
     if (!selectedReq) return;
     setBusy(true);
     try {
-      await send(`/requirements/${selectedReq.id}/quotations/${quoteId}/approve`, "PATCH", {});
+      await send(`/requirements/${selectedReq.id}/quotations/${quoteId}/review`, "PATCH", {action:"APPROVE"});
       showToast("Quotation approved and shared with customer.");
       openDetail(selectedReq);
       loadData();
@@ -485,11 +489,12 @@ export default function EmployeePortal({ user, onLogout }) {
                           onChange={(e) => handleStatusChange(item.id, e.target.value)}
                           className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-800 outline-none"
                         >
-                          <option value="ACCEPTED">Active</option>
-                          <option value="UNDER_REVIEW">Pending</option>
-                          <option value="SENT_TO_VENDOR">Attention</option>
-                          <option value="RESOLVED">Resolved</option>
-                          <option value="CLOSED">Closed</option>
+                          <option value={item.status}>{readable(item.status)}</option>
+                          {item.status==="SUBMITTED"&&<option value="ACCEPTED">Accept requirement</option>}
+                          {item.status==="ACCEPTED"&&<option value="UNDER_REVIEW">Start review</option>}
+                          {["ACCEPTED","UNDER_REVIEW","VENDOR_ACCEPTED","AGREED_PRICING_RECORDED"].includes(item.status)&&<option value="IN_PROGRESS">Start work</option>}
+                          {item.status==="IN_PROGRESS"&&<option value="RESOLVED">Resolve</option>}
+                          {item.status==="RESOLVED"&&<option value="CLOSED">Close</option>}
                         </select>
                       </td>
                       <td className="px-4 py-4 text-right">

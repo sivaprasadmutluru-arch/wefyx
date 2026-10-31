@@ -1,3 +1,4 @@
+import { sessionDestination } from "./sessionRouting";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -139,7 +140,21 @@ function OnboardingStepper({ current, steps = [
   );
 }
 
-export default function PublicRegistration({ initialView = "login" }) {
+function RegistrationLinks({ role = "CUSTOMER" }) {
+  return <nav className="wf-registration-options" aria-label="Employee and vendor registration">
+    <p>Join the Wefyx team or partner with us</p>
+    <div>
+      <a href="/register/employee" aria-current={role === "EMPLOYEE" ? "page" : undefined}>Employee Registration</a>
+      <a href="/register/vendor" aria-current={role === "VENDOR" ? "page" : undefined}>Vendor Registration</a>
+    </div>
+    {role !== "CUSTOMER" && <a className="wf-main-signup-link" href="/register">Back to Sign Up</a>}
+  </nav>;
+}
+
+export default function PublicRegistration({ initialView = "login", registrationRole = "CUSTOMER" }) {
+  const accountRole = ["EMPLOYEE", "VENDOR"].includes(registrationRole) ? registrationRole : "CUSTOMER";
+  const pendingApproval = accountRole !== "CUSTOMER";
+  const accountLabel = accountRole === "EMPLOYEE" ? "Employee" : accountRole === "VENDOR" ? "Vendor" : "Customer";
   // view: 'login' | 'loginOtp' | 'signup' | 'otp' | 'business' | 'address' | 'review' | 'success' | 'forgot'
   const [view, setView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -175,22 +190,22 @@ export default function PublicRegistration({ initialView = "login" }) {
     dialCode: "+971",
     fullPhone: "",
     otp: Array(6).fill(""),
-    companyName: "Acme Trading LLC",
-    tradeLicense: "1234567",
+    companyName: "",
+    tradeLicense: "",
     industry: "Trading & Distribution",
-    companyEmail: "info@acmeuae.com",
-    contactPerson: "Ahmed Khan",
-    jobTitle: "IT Manager",
-    website: "www.acmeuae.com",
+    companyEmail: "",
+    contactPerson: "",
+    jobTitle: "",
+    website: "",
     password: "",
     country: "United Arab Emirates",
     emirate: "Dubai",
-    address: "Office 1204, Business Bay, Dubai, UAE",
-    additionalInfo: "Landmark, Building Name, Floor, etc.",
+    address: "",
+    additionalInfo: "",
     serviceVisitsSame: true,
     billingAddressSame: true,
-    termsConsent: true,
-    role: "CUSTOMER", // Default role for all self-registrations
+    termsConsent: false,
+    role: accountRole,
   });
 
   // Forgot Password Form
@@ -317,11 +332,11 @@ export default function PublicRegistration({ initialView = "login" }) {
       emirate: form.emirate,
       address: form.address.trim(),
       password: form.password,
-      role: "CUSTOMER",
+      role: accountRole,
       otp,
     };
     const res = await sendPublic("/auth/register", "POST", payload);
-    if (res.token) {
+    if (res.token && !pendingApproval) {
       localStorage.setItem("wefyx-token", res.token);
       localStorage.setItem("wefyx-auth", "true");
       localStorage.setItem("wefyx-user", JSON.stringify(res.user));
@@ -409,7 +424,7 @@ export default function PublicRegistration({ initialView = "login" }) {
       if (loginForm.method !== "email") {
         const phone = normalizeLoginPhone(id);
         if (!validOtpPhone(phone)) return setError("Enter a valid UAE or India mobile number, for example +971501234567 or +919618810386.");
-        const result = await sendPublic("/auth/login/send-otp", "POST", { phone });
+        const result = await sendPublic("/auth/customer/login/send-otp", "POST", { phone });
         setLoginForm((curr) => ({ ...curr, verifiedPhone: result.phone, otp: "" }));
         setSuccess(result.message);
         setTimer(30);
@@ -421,7 +436,7 @@ export default function PublicRegistration({ initialView = "login" }) {
       }
       const payload = { email: id, password: loginForm.password };
 
-      const res = await sendPublic("/auth/login", "POST", payload);
+      const res = await sendPublic("/auth/customer/login", "POST", payload);
       if (res.token) {
         if (res.user.role === "SUPER_ADMIN") {
           setError("Administrator login has moved to /admin/login.");
@@ -433,7 +448,7 @@ export default function PublicRegistration({ initialView = "login" }) {
         localStorage.setItem("wefyx-account-type", (res.user.role || "customer").toLowerCase());
         const returnTo = new URLSearchParams(window.location.search).get("returnTo");
         const customerDestination = returnTo && /^\/(account|cart|shop|rent|services|book-support|my-tickets)(\/|\?|$)/.test(returnTo) && !returnTo.includes("\\") ? returnTo : "/account";
-        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/admin/login");
+        window.location.assign(sessionDestination(res.user.role, customerDestination));
       }
     } catch (err) {
       setError(err.message || "Invalid credentials. Please check your email/mobile and password.");
@@ -447,7 +462,7 @@ export default function PublicRegistration({ initialView = "login" }) {
     setError("");
     setBusy(true);
     try {
-      const res = await sendPublic("/auth/login/verify", "POST", {
+      const res = await sendPublic("/auth/customer/login/verify", "POST", {
         phone: loginForm.verifiedPhone,
         otp: loginForm.otp,
       });
@@ -462,7 +477,7 @@ export default function PublicRegistration({ initialView = "login" }) {
         localStorage.setItem("wefyx-account-type", (res.user.role || "customer").toLowerCase());
         const returnTo = new URLSearchParams(window.location.search).get("returnTo");
         const customerDestination = returnTo && /^\/(account|cart|shop|rent|services|book-support|my-tickets)(\/|\?|$)/.test(returnTo) && !returnTo.includes("\\") ? returnTo : "/account";
-        window.location.assign(res.user.role === "CUSTOMER" ? customerDestination : "/admin/login");
+        window.location.assign(sessionDestination(res.user.role, customerDestination));
       }
     } catch (err) {
       setError(err.message || "Invalid OTP. Please check and try again.");
@@ -573,27 +588,15 @@ export default function PublicRegistration({ initialView = "login" }) {
             </section>
 
             <section className="wf-auth-card">
+              {pendingApproval && <div className="wf-registration-intro"><h2>{accountLabel} registration</h2><p>Submit your details for admin approval. After approval, sign in to access your {accountLabel.toLowerCase()} portal.</p></div>}
               <div className="wf-tab-bar">
                 <button type="button" className="wf-tab-btn active">
                   Sign Up
                 </button>
-                <button type="button" onClick={() => setView("login")} className="wf-tab-btn">
+                <button type="button" onClick={() => window.location.assign(pendingApproval ? "/admin/login" : "/login")} className="wf-tab-btn">
                   Login
                 </button>
               </div>
-
-              <div className="wf-social-group">
-                <button type="button" className="wf-social-btn">
-                  <GoogleIcon />
-                  <span>Continue with Google</span>
-                </button>
-                <button type="button" className="wf-social-btn">
-                  <MicrosoftIcon />
-                  <span>Continue with Microsoft</span>
-                </button>
-              </div>
-
-              <div className="wf-divider">OR</div>
 
               <form onSubmit={handleSendOtp}>
                 <div className="wf-form-group">
@@ -641,9 +644,10 @@ export default function PublicRegistration({ initialView = "login" }) {
                 </p>
 
                 <div className="wf-footer-link">
-                  Already have an account? <button type="button" onClick={() => setView("login")}>Login</button>
+                  Already have an account? <a href={pendingApproval ? "/admin/login" : "/login"}>Login</a>
                 </div>
               </form>
+              <RegistrationLinks role={accountRole} />
             </section>
           </div>
         )}
@@ -693,7 +697,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                       Didn&apos;t receive the code? <strong>Resend OTP in 00:{timer < 10 ? `0${timer}` : timer}</strong>
                     </>
                   ) : (
-                    <button type="button" onClick={handleSendOtp} disabled={busy} className="wf-resend-btn">
+                    <button type="button" onClick={handleCreateAccount} disabled={busy} className="wf-resend-btn">
                       Resend OTP now
                     </button>
                   )}
@@ -1114,21 +1118,21 @@ export default function PublicRegistration({ initialView = "login" }) {
                 <Check size={48} strokeWidth={3} />
               </div>
 
-              <h2 className="wf-success-title">Welcome to Wefyx!</h2>
-              <p className="wf-success-lead">Your account has been created successfully.</p>
+              <h2 className="wf-success-title">{pendingApproval ? `${accountLabel} registration submitted` : "Welcome to Wefyx!"}</h2>
+              <p className="wf-success-lead">{pendingApproval ? "Your account is awaiting admin approval." : "Your account has been created successfully."}</p>
               <p className="wf-success-desc">
-                You can now access all our services, raise support tickets, book on-site support, explore asset rentals and more.
+                {pendingApproval ? "A Wefyx administrator will review your registration. Once approved, sign in with your email and password to access your portal." : "You can now access all our services, raise support tickets, book on-site support, explore asset rentals and more."}
               </p>
 
               <button
                 type="button"
-                onClick={() => window.location.assign("/account")}
+                onClick={() => window.location.assign(pendingApproval ? "/admin/login" : "/account")}
                 className="wf-primary-btn"
               >
-                Go to Dashboard <ArrowRight size={17} />
+                {pendingApproval ? "Go to Sign In" : "Go to Dashboard"} <ArrowRight size={17} />
               </button>
 
-              <div className="wf-whats-next-box">
+              {!pendingApproval && <div className="wf-whats-next-box">
                 <h4>What&apos;s Next?</h4>
                 <div className="wf-whats-next-grid">
                   <a href="/account/tickets" className="wf-next-item">
@@ -1148,7 +1152,7 @@ export default function PublicRegistration({ initialView = "login" }) {
                     <span>Get expert support anytime</span>
                   </a>
                 </div>
-              </div>
+              </div>}
             </section>
           </div>
         )}
@@ -1167,19 +1171,6 @@ export default function PublicRegistration({ initialView = "login" }) {
                   Login to your Wefyx account
                 </p>
               </div>
-
-              <div className="wf-social-group">
-                <button type="button" className="wf-social-btn">
-                  <GoogleIcon />
-                  <span>Continue with Google</span>
-                </button>
-                <button type="button" className="wf-social-btn">
-                  <MicrosoftIcon />
-                  <span>Continue with Microsoft</span>
-                </button>
-              </div>
-
-              <div className="wf-divider">OR</div>
 
               <form onSubmit={handleLoginSubmit}>
                 <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-emerald-50 p-1">
@@ -1312,11 +1303,10 @@ export default function PublicRegistration({ initialView = "login" }) {
 
                 <div className="wf-footer-link">
                   Don&apos;t have an account?{" "}
-                  <button type="button" onClick={() => setView("signup")}>
-                    Sign Up
-                  </button>
+                  <a href="/register">Sign Up</a>
                 </div>
               </form>
+              <RegistrationLinks />
             </section>
 
             {/* Right Side: Engineer Hero with Branding */}
@@ -1502,9 +1492,9 @@ export default function PublicRegistration({ initialView = "login" }) {
 }
 
 export function CareersPage() {
-  return <PublicRegistration initialView="signup" />;
+  return <PublicRegistration initialView="signup" registrationRole="EMPLOYEE" />;
 }
 
 export function VendorRegistrationPage() {
-  return <PublicRegistration initialView="signup" />;
+  return <PublicRegistration initialView="signup" registrationRole="VENDOR" />;
 }

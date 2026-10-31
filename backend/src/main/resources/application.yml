@@ -32,6 +32,7 @@ spring:
 server:
   port: ${PORT:8080}
 wefyx:
+  web-url: ${PUBLIC_URL:http://127.0.0.1:5174}
   otp:
     account-sid: ${TWILIO_ACCOUNT_SID:}
     auth-token: ${TWILIO_AUTH_TOKEN:}

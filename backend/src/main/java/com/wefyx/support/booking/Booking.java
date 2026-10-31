@@ -17,7 +17,15 @@ public class Booking {
     @Column(nullable = false, unique = true) String reference;
     @Column(nullable = false, unique = true) String requestKey;
     @Column(nullable = false) String customerEmail;
-    @Enumerated(EnumType.STRING) SupportType supportType;
+    String supportType;
+    String serviceName;
+    @Column(precision=10,scale=2) BigDecimal baseAmount;
+    @Column(precision=10,scale=2) BigDecimal vatAmount;
+    String checkoutSessionId;
+    @Column(length=2000) String checkoutUrl;
+    Instant holdUntil;
+    int checkoutAttempt;
+    int slotMinutes=60;
     String company;
     String contactName;
     String contactEmail;

@@ -44,7 +44,7 @@ export function BookingLayout({ children, title = "Book a Support Service", brea
       </div>
     </section>
     <main className={`bk-shell ${narrow ? "bk-narrow" : ""}`}>
-      {step !== undefined && <Progress steps={["Service Details", "Schedule", "Payment", "Confirmation"]} current={step}/>}
+      {step !== undefined && <Progress steps={["Service Details", "Schedule", "Review", "Request Status"]} current={step}/>}
       <div className="bk-page">{children}</div>
     </main>
   </div>;
@@ -78,7 +78,7 @@ export function Empty({ children }) { return <p className="bk-empty" role="statu
 export function Back({ onClick, children = "Back" }) { return <button type="button" className="bk-back" onClick={onClick}><ArrowLeft size={16}/>{children}</button>; }
 export function Primary({ children, ...props }) { return <button className="wh-button" {...props}>{children}<ArrowRight size={17}/></button>; }
 export function Summary({ booking }) {
-  return <dl className="bk-summary">{[["Service type", supportNames[booking.supportType]], ["Date & time", `${booking.date} · ${booking.time} (UAE)`], ["Company", booking.company], ["Contact person", booking.contactName], ["Issue category", booking.category], ["Subject", booking.subject], ["Address", `${booking.address}, ${booking.emirate}`]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+  return <dl className="bk-summary">{[["Service type", booking.serviceName||supportNames[booking.supportType]||booking.supportType], ["Date & time", `${booking.date} · ${booking.time} (UAE)`], ["Company", booking.company], ["Contact person", booking.contactName], ["Issue category", booking.category], ["Subject", booking.subject], ["Address", `${booking.address}, ${booking.emirate}`]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 }
 export function StatusBadge({ status }) { return <span className={`bk-status bk-status-${status}`}>{statusName(status)}</span>; }
-export function SignIn({ returnTo = window.location.pathname }) { return <div className="bk-empty"><ShieldCheck size={35}/><h2>Sign in to continue</h2><p>Use your Wefyx account to access your service bookings.</p><a className="wh-button" href={`/portal?returnTo=${encodeURIComponent(returnTo)}`}>Sign in <ArrowRight size={16}/></a></div>; }
+export function SignIn({ returnTo = window.location.pathname }) { return <div className="bk-empty"><ShieldCheck size={35}/><h2>Sign in to continue</h2><p>Use your Wefyx account to access your service bookings.</p><a className="wh-button" href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in <ArrowRight size={16}/></a></div>; }
